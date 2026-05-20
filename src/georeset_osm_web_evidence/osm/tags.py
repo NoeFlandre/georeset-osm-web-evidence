@@ -8,6 +8,6 @@ ENVIRONMENTAL_TAGS = [
     ("natural", "wetland"),
     ("natural", "grassland"),
     ("natural", "heath"),
-    ("leisure", "natural reserve"),
+    ("leisure", "natural_reserve"),
     ("boundary", "protected_area"),
 ]
