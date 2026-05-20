@@ -3,3 +3,5 @@ This project focuses on OpenStreetMap (OSM) polygons, for which we do not have d
 Future ideas: 
 - Perform name entity recognition on the text we scrapped, link these entities to their coordinates (gazeteer or wikipedia page when available + LLM disambuigation). This will therefore enable us to compute an average of these coordiates and compare them to the polygon to figure whether the zone is relevant spatially (the polygon) and semantically (the text). 
 - If similarity between polygons has to be computed we ca think of comparing embeddings (Alpha Earth) or satellite images.
+
+We separate concerns by keeping the code in this repository while keeping the data in a hugging face bucket : hf sync ./data hf://buckets/NoeFlandre/georeset-osm-web-evidence
