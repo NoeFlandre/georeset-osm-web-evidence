@@ -1,4 +1,4 @@
-from georeset_osm_web_evidence.osm.geometry import element_to_polygon
+from georeset_osm_web_evidence.osm.geometry import elements_to_records
 from georeset_osm_web_evidence.osm.overpass import (
     build_polygon_query,
     fetch_overpass_json,
@@ -29,9 +29,13 @@ def main() -> None:
 
     print(f"Fetched {len(elements)} OSM elements")
 
-    element = elements[0]
-    polygon = element_to_polygon(element)
-    print(polygon)
+    records = elements_to_records(elements)
+    if records is None:
+        print(f"No records")
+    print(f"Converted {len(records)} OSM elements into records")
+
+    first_record = records[0]
+    print(f"First record: {first_record}")
 
 
 if __name__ == "__main__":
