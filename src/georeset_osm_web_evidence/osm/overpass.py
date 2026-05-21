@@ -1,3 +1,5 @@
+import time
+
 import requests
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -25,20 +27,39 @@ out geom;
     """
 
 
-def fetch_overpass_json(query: str) -> dict:
-    response = requests.post(
-        OVERPASS_URL,
-        data={"data": query},
-        headers={
-            "User-Agent": "georeset_osm_web_evidence/0.1.0",
-            "Accept": "application/json",
-        },
-        timeout=240,
-    )
+def fetch_overpass_json(
+    query: str,
+    max_retries: int,
+    retry_delay_seconds: int,
+) -> dict:
+    last_error = None
 
-    if not response.ok:
-        print(query)
-        print(response.text)
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"Trying to request Overpass, attempt {attempt}/{max_retries}")
+            response = requests.post(
+                OVERPASS_URL,
+                data={"data": query},
+                headers={
+                    "User-Agent": "georeset_osm_web_evidence/0.1.0",
+                    "Accept": "application/json",
+                },
+                timeout=240,
+            )
 
-    response.raise_for_status()
-    return response.json()
+            if not response.ok:
+                print(query)
+                print(response.text)
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.RequestException as error:
+            last_error = error
+            print(f"Overpass request failed on attempt {attempt}/{max_retries}")
+
+        if attempt < max_retries:
+            time.sleep(retry_delay_seconds)
+            print(f"Sleeping for {retry_delay_seconds}")
+
+    raise last_error

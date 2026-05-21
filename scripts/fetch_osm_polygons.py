@@ -30,7 +30,7 @@ def main() -> None:
         )
 
         try:
-            data = fetch_overpass_json(query)
+            data = fetch_overpass_json(query, max_retries=5, retry_delay_seconds=10)
         except Exception as error:
             print(f"Skipping bbox {index} because Overpass failed : {error}")
             continue
