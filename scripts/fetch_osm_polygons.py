@@ -10,6 +10,7 @@ from georeset_osm_web_evidence.osm.overpass import (
     fetch_overpass_json,
 )
 from georeset_osm_web_evidence.osm.tags import ENVIRONMENTAL_TAGS
+from georeset_osm_web_evidence.storage.local import save_geodataframe
 
 
 def main() -> None:
@@ -51,6 +52,10 @@ def main() -> None:
     print(
         gdf[["osm_type", "osm_id", "area_km2", "centroid_lon", "centroid_lat"]].head()
     )
+
+    path = "data/raw/osm_polygons_sample.parquet"
+    save_geodataframe(gdf, path)
+    print(f"Saved geodataframe to {path}")
 
 
 if __name__ == "__main__":
