@@ -1,5 +1,6 @@
 from georeset_osm_web_evidence.osm.geodataframe import (
     add_area_km2,
+    filter_by_area,
     records_to_geodataframe,
 )
 from georeset_osm_web_evidence.osm.geometry import elements_to_records
@@ -41,6 +42,8 @@ def main() -> None:
 
     gdf = records_to_geodataframe(records)
     gdf = add_area_km2(gdf)
+    gdf = filter_by_area(gdf, min_area_km2=2, max_area_km2=80)
+    print(f"Kept {len(gdf)} polygons after filtering by area")
 
     print(gdf[["osm_type", "osm_id", "area_km2"]].head())
 
