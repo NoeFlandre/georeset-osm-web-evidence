@@ -1,5 +1,6 @@
 from georeset_osm_web_evidence.osm.geodataframe import (
     add_area_km2,
+    add_centroid_coordinates,
     filter_by_area,
     records_to_geodataframe,
 )
@@ -45,7 +46,11 @@ def main() -> None:
     gdf = filter_by_area(gdf, min_area_km2=2, max_area_km2=80)
     print(f"Kept {len(gdf)} polygons after filtering by area")
 
-    print(gdf[["osm_type", "osm_id", "area_km2"]].head())
+    gdf = add_centroid_coordinates(gdf)
+
+    print(
+        gdf[["osm_type", "osm_id", "area_km2", "centroid_lon", "centroid_lat"]].head()
+    )
 
 
 if __name__ == "__main__":

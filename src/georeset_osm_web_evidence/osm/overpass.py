@@ -15,9 +15,9 @@ def build_polygon_query(
         f' relation["{key}"="{value}"]({south},{west},{north},{east});'  # a relation is more complex polygon, often having holes or multiple parts
         for key, value in tags
     )
-    # we want the results back within 180s as a json of the gemoetry and the tags
+    # we want the results back within 580s as a json of the gemoetry and the tags
     return f"""
-[out:json][timeout:180];
+[out:json][timeout:580];
 (
 {tag_filters}
 );

@@ -26,3 +26,14 @@ def filter_by_area(
     return gdf[
         (gdf["area_km2"] >= min_area_km2) & (gdf["area_km2"] <= max_area_km2)
     ].copy()
+
+
+def add_centroid_coordinates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    gdf = gdf.copy()
+    metric_gdf = gdf.to_crs("EPSG:2154")
+    centroids = metric_gdf.centroid.to_crs("EPSG:4326")
+
+    gdf["centroid_lon"] = centroids.x
+    gdf["centroid_lat"] = centroids.y
+
+    return gdf
