@@ -29,8 +29,8 @@ out geom;
 
 def fetch_overpass_json(
     query: str,
-    max_retries: int,
-    retry_delay_seconds: int,
+    max_retries: int = 3,
+    retry_delay_seconds: int = 10,
 ) -> dict:
     last_error = None
 
