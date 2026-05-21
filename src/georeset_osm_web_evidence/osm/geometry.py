@@ -13,3 +13,17 @@ def element_to_polygon(element: dict) -> Polygon | None:
         return None
 
     return Polygon(coordinates)
+
+
+def element_to_record(element: dict) -> dict | None:
+    polygon = element_to_polygon(element)
+
+    if not polygon:
+        return None
+
+    return {
+        "osm_type": element.get("type"),
+        "osm_id": element.get("id"),
+        "osm_tags": element.get("tags", {}),
+        "geometry": polygon,
+    }
