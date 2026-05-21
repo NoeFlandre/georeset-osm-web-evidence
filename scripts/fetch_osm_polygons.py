@@ -1,3 +1,4 @@
+from georeset_osm_web_evidence.osm.geometry import element_to_polygon
 from georeset_osm_web_evidence.osm.overpass import (
     build_polygon_query,
     fetch_overpass_json,
@@ -21,10 +22,16 @@ def main() -> None:
 
     data = fetch_overpass_json(query)
     elements = data.get("elements", [])
+
+    if not elements:
+        print("No elements found")
+        return
+
     print(f"Fetched {len(elements)} OSM elements")
 
-    for element in elements[:2]:
-        print(element["type"], element["id"], element.get("tags", {}))
+    element = elements[0]
+    polygon = element_to_polygon(element)
+    print(polygon)
 
 
 if __name__ == "__main__":
