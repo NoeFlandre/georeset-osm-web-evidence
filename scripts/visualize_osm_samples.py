@@ -4,7 +4,7 @@ from georeset_osm_web_evidence.viz.map import create_polygon_map
 
 def main() -> None:
     input_path = "data/raw/osm_polygons_sample.parquet"
-    output_path = "data/raw/osm_polygons_sample.html"
+    output_path = "data/processed/osm_polygons_sample.html"
 
     gdf = load_geodataframe(input_path)
     create_polygon_map(gdf, output_path)
