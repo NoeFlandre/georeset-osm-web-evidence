@@ -1,3 +1,7 @@
+from georeset_osm_web_evidence.osm.geodataframe import (
+    add_area_km2,
+    records_to_geodataframe,
+)
 from georeset_osm_web_evidence.osm.geometry import elements_to_records
 from georeset_osm_web_evidence.osm.overpass import (
     build_polygon_query,
@@ -35,8 +39,10 @@ def main() -> None:
         return
     print(f"Converted {len(records)} OSM elements into records")
 
-    first_record = records[0]
-    print(f"First record: {first_record}")
+    gdf = records_to_geodataframe(records)
+    gdf = add_area_km2(gdf)
+
+    print(gdf[["osm_type", "osm_id", "area_km2"]].head())
 
 
 if __name__ == "__main__":
