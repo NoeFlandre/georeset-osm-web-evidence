@@ -16,3 +16,13 @@ def add_area_km2(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     gdf["area_km2"] = metric_gdf.area / 1_000_000
 
     return gdf
+
+
+def filter_by_area(
+    gdf: gpd.GeoDataFrame,
+    min_area_km2: float,
+    max_area_km2: float,
+) -> gpd.GeoDataFrame:
+    return gdf[
+        (gdf["area_km2"] >= min_area_km2) & (gdf["area_km2"] <= max_area_km2)
+    ].copy()
