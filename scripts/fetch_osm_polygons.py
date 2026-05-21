@@ -30,8 +30,9 @@ def main() -> None:
     print(f"Fetched {len(elements)} OSM elements")
 
     records = elements_to_records(elements)
-    if records is None:
+    if not records:
         print(f"No records")
+        return
     print(f"Converted {len(records)} OSM elements into records")
 
     first_record = records[0]
