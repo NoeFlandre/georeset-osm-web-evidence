@@ -15,9 +15,9 @@ def build_polygon_query(
         f' relation["{key}"="{value}"]({south},{west},{north},{east});'  # a relation is more complex polygon, often having holes or multiple parts
         for key, value in tags
     )
-    # we want the results back within 8800s as a json of the gemoetry and the tags
+    # we want the results back within 240s as a json of the gemoetry and the tags
     return f"""
-[out:json][timeout:8800];
+[out:json][timeout:240];
 (
 {tag_filters}
 );
@@ -33,7 +33,7 @@ def fetch_overpass_json(query: str) -> dict:
             "User-Agent": "georeset_osm_web_evidence/0.1.0",
             "Accept": "application/json",
         },
-        timeout=8800,
+        timeout=240,
     )
 
     if not response.ok:
