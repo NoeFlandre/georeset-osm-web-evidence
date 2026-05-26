@@ -28,5 +28,8 @@ def create_polygon_map(
 
     folium.LayerControl().add_to(map_)
 
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     map_.save(output_path)
     print(f"Created a map of the polygons at {output_path}")

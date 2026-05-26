@@ -1,11 +1,11 @@
 import pandas as pd
 
-from src.georeset_osm_web_evidence.storage.local import (
+from georeset_osm_web_evidence.storage.local import (
     load_geodataframe,
     save_geodataframe,
 )
-from src.georeset_osm_web_evidence.wikipedia.api import geosearch_wikipedia
-from src.georeset_osm_web_evidence.wikipedia.spatial import (
+from georeset_osm_web_evidence.wikipedia.api import geosearch_wikipedia
+from georeset_osm_web_evidence.wikipedia.spatial import (
     filter_articles_inside_polygon,
 )
 
@@ -44,7 +44,7 @@ def main() -> None:
                 "fr_wikipedia_articles": articles_fr,
                 "en_wikipedia_articles": articles_en,
                 "fr_wikipedia_articles_count": len(articles_fr),
-                "en_wikipedia.articles_count": len(articles_en),
+                "en_wikipedia_articles_count": len(articles_en),
                 "has_fr_wikipedia_articles": len(articles_fr) > 0,
                 "has_en_wikipedia_articles": len(articles_en) > 0,
                 "has_wikipedia_articles": bool(articles_fr or articles_en),
