@@ -55,8 +55,7 @@ def get_query_terms(category: str) -> list[str]:
         return WETLAND_TERMS
     if category == "protected_area":
         return PROTECTED_AREA_TERMS
-    if category == "default":
-        return DEFAULT_TERMS
+    return DEFAULT_TERMS
 
 
 def build_search_queries(osm_tags: dict) -> list[str]:
