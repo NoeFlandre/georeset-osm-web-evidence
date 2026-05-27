@@ -7,7 +7,7 @@ from georeset_osm_web_evidence.storage.local import (
 
 
 def main():
-    input_path = "data/processed/osm_polygons_sample_batch300_wikipedia.parquet"
+    input_path = "data/processed/osm_polygons_sample_wikipedia.parquet"
     output_path = (
         "data/processed/osm_polygons_sample100_wikipedia_balanced_50_50.parquet"
     )
