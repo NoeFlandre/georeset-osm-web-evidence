@@ -39,3 +39,14 @@ def elements_to_records(elements: list[dict]) -> list[dict]:
             records.append(record)
 
     return records
+
+
+def record_has_name(record: dict) -> bool:
+    tags = record.get("osm_tags", {})
+    name = tags.get("name")
+
+    return isinstance(name, str) and name.strip() != ""
+
+
+def filter_records_with_name(records: list[dict]) -> list[dict]:
+    return [record for record in records if record_has_name(record)]

@@ -7,7 +7,10 @@ from georeset_osm_web_evidence.osm.geodataframe import (
     filter_by_area,
     records_to_geodataframe,
 )
-from georeset_osm_web_evidence.osm.geometry import elements_to_records
+from georeset_osm_web_evidence.osm.geometry import (
+    elements_to_records,
+    filter_records_with_name,
+)
 from georeset_osm_web_evidence.osm.overpass import (
     build_polygon_query,
     fetch_overpass_json,
@@ -44,10 +47,12 @@ def main() -> None:
         print(f"Fetched {len(elements)} OSM elements")
 
         records = elements_to_records(elements)
+        records = filter_records_with_name(records)
+
         if not records:
             print(f"No records")
             continue
-        print(f"Converted {len(records)} OSM elements into records")
+        print(f"Kept {len(records)} named OSM records")
 
         gdf = records_to_geodataframe(records)
 
