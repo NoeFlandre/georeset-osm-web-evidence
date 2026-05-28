@@ -7,10 +7,8 @@ from georeset_osm_web_evidence.storage.local import (
 
 
 def main():
-    input_path = "data/processed/osm_polygons_sample_wikipedia.parquet"
-    output_path = (
-        "data/processed/osm_polygons_sample100_wikipedia_balanced_50_50.parquet"
-    )
+    input_path = "data/interim/wikipedia/named_polygon_candidates_wikipedia.parquet"
+    output_path = "data/processed/samples/balanced_wikipedia_100.parquet"
 
     gdf = load_geodataframe(input_path)
 

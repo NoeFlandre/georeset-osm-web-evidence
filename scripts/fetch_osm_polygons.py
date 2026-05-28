@@ -79,7 +79,7 @@ def main() -> None:
     combined_gdfs = pd.concat(gdfs, ignore_index=True)
     combined_gdfs = combined_gdfs.drop_duplicates(subset=["osm_type", "osm_id"])
 
-    path = "data/raw/osm_polygons_sample.parquet"
+    path = "data/raw/osm/named_polygon_candidates.parquet"
     save_geodataframe(combined_gdfs, path)
     print(f"Saved {len(combined_gdfs)} candidate polygons to {path}")
 

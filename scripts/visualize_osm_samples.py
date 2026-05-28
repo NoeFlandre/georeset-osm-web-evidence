@@ -3,10 +3,8 @@ from georeset_osm_web_evidence.viz.map import create_polygon_map
 
 
 def main() -> None:
-    input_path = (
-        "data/processed/osm_polygons_sample100_wikipedia_balanced_50_50.parquet"
-    )
-    output_path = "data/processed/osm_polygons_sample100_wikipedia_balanced_50_50.html"
+    input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
+    output_path = "data/processed/maps/balanced_wikipedia_100.html"
 
     gdf = load_geodataframe(input_path)
 

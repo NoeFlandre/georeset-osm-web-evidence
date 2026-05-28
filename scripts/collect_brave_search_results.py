@@ -30,10 +30,8 @@ def result_to_row(
 
 
 def main() -> None:
-    input_path = (
-        "data/processed/osm_polygons_sample100_wikipedia_balanced_50_50.parquet"
-    )
-    output_path = "data/processed/brave_search_results_sample.parquet"
+    input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
+    output_path = "data/processed/search/brave_results_sample.parquet"
     polygon_limit = 5
     results_per_query = 5
     request_delay_seconds = 1.2

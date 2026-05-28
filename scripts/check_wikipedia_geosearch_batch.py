@@ -29,10 +29,8 @@ def find_articles_inside_polygons(
 
 def main() -> None:
     batch_size = 300
-    input_path = "data/raw/osm_polygons_sample.parquet"
-    output_path = (
-        f"data/processed/osm_polygons_sample_batch{batch_size}_wikipedia.parquet"
-    )
+    input_path = "data/raw/osm/named_polygon_candidates.parquet"
+    output_path = "data/interim/wikipedia/named_polygon_candidates_wikipedia.parquet"
 
     gdf = load_geodataframe(input_path)
     batch_gdf = gdf.head(batch_size).copy()
