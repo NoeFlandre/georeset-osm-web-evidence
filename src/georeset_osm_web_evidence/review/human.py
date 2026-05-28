@@ -12,6 +12,7 @@ REVIEW_COLUMNS = [
     "text_preview",
     "source_url",
     "page_title",
+    "search_queries",
     "search_title",
     "search_description",
     "has_wikipedia_articles",
@@ -124,13 +125,14 @@ def save_human_review_xlsx(review_df: pd.DataFrame, path: str) -> None:
         "E": 90,  # text_preview
         "F": 42,  # source_url
         "G": 34,  # page_title
-        "H": 34,  # search_title
-        "I": 42,  # search_description
-        "J": 18,  # has_wikipedia_articles
-        "K": 12,  # text_length
-        "L": 14,  # fetch_status
-        "M": 12,  # osm_type
-        "N": 14,  # osm_id
+        "H": 44,  # search_queries
+        "I": 34,  # search_title
+        "J": 42,  # search_description
+        "K": 18,  # has_wikipedia_articles
+        "L": 12,  # text_length
+        "M": 14,  # fetch_status
+        "N": 12,  # osm_type
+        "O": 14,  # osm_id
     }
 
     for column_letter, width in column_widths.items():

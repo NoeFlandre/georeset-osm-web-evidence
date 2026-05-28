@@ -6,6 +6,13 @@ import pandas as pd
 from georeset_osm_web_evidence.web.text import fetch_page_text
 
 
+def combine_queries_for_review(queries) -> str:
+    if queries is None:
+        return ""
+
+    return "; ".join(str(query) for query in queries)
+
+
 def main() -> None:
     input_path = "data/processed/search/brave_candidate_urls_sample.parquet"
     output_path = "data/processed/evidence/page_text_sample.parquet"
@@ -34,6 +41,7 @@ def main() -> None:
                 "source_url": row.url,
                 "search_title": row.title,
                 "search_description": row.description,
+                "search_queries": combine_queries_for_review(row.queries),
                 **page_text,
             }
         )

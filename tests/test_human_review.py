@@ -22,6 +22,7 @@ class HumanReviewTests(unittest.TestCase):
                     "polygon_name": "Forêt test",
                     "has_wikipedia_articles": False,
                     "source_url": "https://example.test/forest",
+                    "search_queries": '"Forêt test" forêt; "Forêt test" biodiversité',
                     "search_title": "Search title",
                     "search_description": "Search description",
                     "title": "Page title",
@@ -35,6 +36,7 @@ class HumanReviewTests(unittest.TestCase):
                     "polygon_name": "Marais test",
                     "has_wikipedia_articles": True,
                     "source_url": "https://example.test/broken",
+                    "search_queries": '"Marais test" zone humide',
                     "search_title": "Broken result",
                     "search_description": "Broken description",
                     "title": None,
@@ -69,6 +71,7 @@ class HumanReviewTests(unittest.TestCase):
                     "text_preview": "Readable preview",
                     "source_url": "https://example.test/forest",
                     "page_title": "Page title",
+                    "search_queries": '"Forêt test" forêt',
                     "search_title": "Search title",
                     "search_description": "Search description",
                     "has_wikipedia_articles": False,
@@ -89,6 +92,7 @@ class HumanReviewTests(unittest.TestCase):
 
         self.assertEqual(worksheet.freeze_panes, "E2")
         self.assertEqual(worksheet["E1"].value, "text_preview")
+        self.assertEqual(worksheet["H1"].value, "search_queries")
         self.assertEqual(worksheet["F2"].hyperlink.target, "https://example.test/forest")
 
     def test_selects_successful_rows_with_caps_per_polygon(self):
