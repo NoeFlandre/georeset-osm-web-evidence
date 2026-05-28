@@ -13,3 +13,4 @@ Small command-line entry points for running the pipeline stages. Run scripts fro
 - `collect_brave_search_results.py` collects Brave Search results for a limited polygon subset and saves normalized result rows to `data/processed/search/brave_results_sample.parquet`. Requires `BRAVE_SEARCH_API_KEY`.
 - `prepare_search_result_urls.py` deduplicates Brave Search results into candidate evidence URLs and removes Wikipedia URLs.
 - `fetch_candidate_page_text.py` fetches a small batch of candidate URLs, extracts readable page text, and saves `data/processed/evidence/page_text_sample.parquet`.
+- `build_human_review_sample.py` converts fetched page text into a reviewer-friendly CSV with empty human label and notes columns.
