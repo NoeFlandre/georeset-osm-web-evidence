@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata in this file."
+title: "georeset-osm-web-evidence"
+version: "0.1.0"
+authors:
+  - family-names: "Flandre"
+    given-names: "Noé"
+repository-code: "https://github.com/NoeFlandre/georeset-osm-web-evidence"
+license: "MIT"
