@@ -1,0 +1,11 @@
+# georeset_osm_web_evidence
+
+Core Python package for the OSM web-evidence pipeline.
+
+The package is organized by responsibility:
+
+- `osm/` fetches and prepares OSM polygon candidates.
+- `wikipedia/` checks whether geolocated Wikipedia articles fall inside polygons.
+- `search/` builds web search queries and calls search providers.
+- `storage/` reads and writes local geospatial artifacts.
+- `viz/` creates lightweight visual QA maps.
