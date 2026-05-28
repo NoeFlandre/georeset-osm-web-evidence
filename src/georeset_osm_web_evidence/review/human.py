@@ -1,23 +1,27 @@
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
 
 
 REVIEW_COLUMNS = [
     "review_id",
     "human_label",
     "human_notes",
-    "fetch_status",
     "polygon_name",
+    "text_preview",
     "source_url",
+    "page_title",
     "search_title",
     "search_description",
-    "page_title",
-    "text_preview",
-    "fetch_error",
+    "has_wikipedia_articles",
     "text_length",
+    "fetch_status",
     "osm_type",
     "osm_id",
-    "has_wikipedia_articles",
 ]
+
+LABEL_OPTIONS = ["relevant", "irrelevant", "broken", "unclear"]
 
 
 def clean_text_for_review(text: str | None) -> str:
@@ -92,3 +96,61 @@ def build_human_review_dataframe(
     review_df["fetch_error"] = review_df["fetch_error"].fillna("")
 
     return review_df[REVIEW_COLUMNS]
+
+
+def save_human_review_xlsx(review_df: pd.DataFrame, path: str) -> None:
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        review_df.to_excel(writer, sheet_name="review", index=False)
+
+    workbook = load_workbook(path)
+    worksheet = workbook["review"]
+
+    worksheet.freeze_panes = "E2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    header_fill = PatternFill("solid", fgColor="D9EAF7")
+    header_font = Font(bold=True)
+
+    for cell in worksheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    column_widths = {
+        "A": 14,  # review_id
+        "B": 16,  # human_label
+        "C": 30,  # human_notes
+        "D": 28,  # polygon_name
+        "E": 90,  # text_preview
+        "F": 42,  # source_url
+        "G": 34,  # page_title
+        "H": 34,  # search_title
+        "I": 42,  # search_description
+        "J": 18,  # has_wikipedia_articles
+        "K": 12,  # text_length
+        "L": 14,  # fetch_status
+        "M": 12,  # osm_type
+        "N": 14,  # osm_id
+    }
+
+    for column_letter, width in column_widths.items():
+        worksheet.column_dimensions[column_letter].width = width
+
+    for row in worksheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    for cell in worksheet["F"][1:]:
+        if cell.value:
+            cell.hyperlink = cell.value
+            cell.style = "Hyperlink"
+
+    label_validation = DataValidation(
+        type="list",
+        formula1=f'"{",".join(LABEL_OPTIONS)}"',
+        allow_blank=True,
+    )
+    worksheet.add_data_validation(label_validation)
+    label_validation.add(f"B2:B{worksheet.max_row}")
+
+    workbook.save(path)

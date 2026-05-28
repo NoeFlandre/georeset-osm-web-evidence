@@ -1,9 +1,13 @@
 import unittest
+from tempfile import TemporaryDirectory
+from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
 
 from georeset_osm_web_evidence.review.human import (
     build_human_review_dataframe,
+    save_human_review_xlsx,
     select_successful_review_rows,
 )
 
@@ -44,8 +48,8 @@ class HumanReviewTests(unittest.TestCase):
         review_df = build_human_review_dataframe(source, preview_chars=40)
 
         self.assertEqual(
-            list(review_df.columns[:4]),
-            ["review_id", "human_label", "human_notes", "fetch_status"],
+            list(review_df.columns[:5]),
+            ["review_id", "human_label", "human_notes", "polygon_name", "text_preview"],
         )
         self.assertEqual(review_df.loc[0, "review_id"], "review-0001")
         self.assertEqual(review_df.loc[0, "fetch_status"], "fetched")
@@ -53,6 +57,39 @@ class HumanReviewTests(unittest.TestCase):
         self.assertEqual(review_df.loc[0, "human_notes"], "")
         self.assertLessEqual(len(review_df.loc[0, "text_preview"]), 41)
         self.assertEqual(len(review_df), 1)
+
+    def test_saves_reviewer_friendly_xlsx(self):
+        review_df = pd.DataFrame(
+            [
+                {
+                    "review_id": "review-0001",
+                    "human_label": "",
+                    "human_notes": "",
+                    "polygon_name": "Forêt test",
+                    "text_preview": "Readable preview",
+                    "source_url": "https://example.test/forest",
+                    "page_title": "Page title",
+                    "search_title": "Search title",
+                    "search_description": "Search description",
+                    "has_wikipedia_articles": False,
+                    "text_length": 100,
+                    "fetch_status": "fetched",
+                    "osm_type": "way",
+                    "osm_id": 123,
+                }
+            ]
+        )
+
+        with TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "review.xlsx"
+            save_human_review_xlsx(review_df, str(path))
+
+            workbook = load_workbook(path)
+            worksheet = workbook["review"]
+
+        self.assertEqual(worksheet.freeze_panes, "E2")
+        self.assertEqual(worksheet["E1"].value, "text_preview")
+        self.assertEqual(worksheet["F2"].hyperlink.target, "https://example.test/forest")
 
     def test_selects_successful_rows_with_caps_per_polygon(self):
         source = pd.DataFrame(
