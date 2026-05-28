@@ -10,3 +10,4 @@ Small command-line entry points for running the pipeline stages. Run scripts fro
 - `visualize_osm_samples.py` builds a Folium HTML map for the balanced sample and colors polygons by Wikipedia coverage.
 - `build_search_queries.py` prints tag-aware, name-based web search queries for the balanced sample.
 - `search_brave_sample.py` runs a small Brave Search smoke test on a few generated queries. Requires `BRAVE_SEARCH_API_KEY`.
+- `collect_brave_search_results.py` collects Brave Search results for a limited polygon subset and saves normalized result rows to `data/processed/brave_search_results_sample.parquet`. Requires `BRAVE_SEARCH_API_KEY`.
