@@ -36,11 +36,43 @@ def make_text_preview(text: str | None, preview_chars: int = 1500) -> str:
     return clean_text[:preview_chars].rstrip() + "…"
 
 
+def select_successful_review_rows(
+    page_text_df: pd.DataFrame,
+    max_rows: int = 30,
+    max_rows_per_polygon: int = 2,
+) -> pd.DataFrame:
+    successful_df = page_text_df[
+        page_text_df["fetch_error"].isna()
+        & page_text_df["text"].apply(lambda text: isinstance(text, str) and bool(text))
+    ].copy()
+
+    successful_df = successful_df.sort_values(
+        [
+            "has_wikipedia_articles",
+            "osm_type",
+            "polygon_name",
+            "source_url",
+        ]
+    )
+
+    capped_df = successful_df.groupby("polygon_name", group_keys=False).head(
+        max_rows_per_polygon
+    )
+
+    return capped_df.head(max_rows).reset_index(drop=True)
+
+
 def build_human_review_dataframe(
     page_text_df: pd.DataFrame,
     preview_chars: int = 1500,
+    max_rows: int = 30,
+    max_rows_per_polygon: int = 2,
 ) -> pd.DataFrame:
-    review_df = page_text_df.copy()
+    review_df = select_successful_review_rows(
+        page_text_df,
+        max_rows=max_rows,
+        max_rows_per_polygon=max_rows_per_polygon,
+    )
 
     review_df = review_df.sort_values(["polygon_name", "source_url"]).reset_index(
         drop=True

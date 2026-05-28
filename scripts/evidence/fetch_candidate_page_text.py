@@ -9,10 +9,14 @@ from georeset_osm_web_evidence.web.text import fetch_page_text
 def main() -> None:
     input_path = "data/processed/search/brave_candidate_urls_sample.parquet"
     output_path = "data/processed/evidence/page_text_sample.parquet"
-    url_limit = 5
+    url_limit = None
     request_delay_seconds = 1.0
 
-    candidate_urls_df = pd.read_parquet(input_path).head(url_limit)
+    candidate_urls_df = pd.read_parquet(input_path)
+
+    if url_limit is not None:
+        candidate_urls_df = candidate_urls_df.head(url_limit)
+
     rows = []
 
     for index, row in enumerate(candidate_urls_df.itertuples(), start=1):

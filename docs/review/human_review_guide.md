@@ -5,6 +5,10 @@ Human review files are generated under `data/review/`.
 Each row is one candidate web page for one OSM polygon. The reviewer should
 decide whether the page is useful evidence for that polygon.
 
+The review sample only includes pages whose text was fetched successfully.
+Broken pages are kept in the upstream evidence artifact, but are not presented
+for human relevance review.
+
 ## Labels
 
 Use one of these values in `human_label`:
