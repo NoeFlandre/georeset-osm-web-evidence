@@ -7,5 +7,6 @@ The package is organized by responsibility:
 - `osm/` fetches and prepares OSM polygon candidates.
 - `wikipedia/` checks whether geolocated Wikipedia articles fall inside polygons.
 - `search/` builds web search queries and calls search providers.
+- `web/` fetches candidate evidence pages and extracts readable text.
 - `storage/` reads and writes local geospatial artifacts.
 - `viz/` creates lightweight visual QA maps.
