@@ -69,6 +69,8 @@ class HumanReviewTests(unittest.TestCase):
                     "human_notes": "",
                     "polygon_name": "Forêt test",
                     "text_preview": "Readable preview",
+                    "extraction_error": "",
+                    "extraction_method": "trafilatura",
                     "source_url": "https://example.test/forest",
                     "page_title": "Page title",
                     "search_queries": '"Forêt test" forêt',
@@ -92,8 +94,11 @@ class HumanReviewTests(unittest.TestCase):
 
         self.assertEqual(worksheet.freeze_panes, "E2")
         self.assertEqual(worksheet["E1"].value, "text_preview")
-        self.assertEqual(worksheet["H1"].value, "search_queries")
-        self.assertEqual(worksheet["F2"].hyperlink.target, "https://example.test/forest")
+        self.assertEqual(worksheet["F1"].value, "extraction_error")
+        self.assertEqual(worksheet["G1"].value, "extraction_method")
+        self.assertEqual(worksheet["H1"].value, "source_url")
+        self.assertEqual(worksheet["H2"].hyperlink.target, "https://example.test/forest")
+        self.assertEqual(worksheet["J1"].value, "search_queries")
 
     def test_selects_successful_rows_with_caps_per_polygon(self):
         source = pd.DataFrame(

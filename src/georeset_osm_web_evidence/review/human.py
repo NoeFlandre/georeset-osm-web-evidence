@@ -3,13 +3,14 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-
 REVIEW_COLUMNS = [
     "review_id",
     "human_label",
     "human_notes",
     "polygon_name",
     "text_preview",
+    "extraction_error",
+    "extraction_method",
     "source_url",
     "page_title",
     "search_queries",
@@ -96,6 +97,12 @@ def build_human_review_dataframe(
     )
     review_df["fetch_error"] = review_df["fetch_error"].fillna("")
 
+    for column in ["extraction_method", "extraction_error"]:
+        if column not in review_df.columns:
+            review_df[column] = ""
+
+        review_df[column] = review_df[column].fillna("")
+
     return review_df[REVIEW_COLUMNS]
 
 
@@ -123,16 +130,18 @@ def save_human_review_xlsx(review_df: pd.DataFrame, path: str) -> None:
         "C": 30,  # human_notes
         "D": 28,  # polygon_name
         "E": 90,  # text_preview
-        "F": 42,  # source_url
-        "G": 34,  # page_title
-        "H": 44,  # search_queries
-        "I": 34,  # search_title
-        "J": 42,  # search_description
-        "K": 18,  # has_wikipedia_articles
-        "L": 12,  # text_length
-        "M": 14,  # fetch_status
-        "N": 12,  # osm_type
-        "O": 14,  # osm_id
+        "F": 28,  # extraction_error
+        "G": 18,  # extraction_method
+        "H": 42,  # source_url
+        "I": 34,  # page_title
+        "J": 44,  # search_queries
+        "K": 34,  # search_title
+        "L": 42,  # search_description
+        "M": 18,  # has_wikipedia_articles
+        "N": 12,  # text_length
+        "O": 14,  # fetch_status
+        "P": 12,  # osm_type
+        "Q": 14,  # osm_id
     }
 
     for column_letter, width in column_widths.items():
@@ -142,7 +151,7 @@ def save_human_review_xlsx(review_df: pd.DataFrame, path: str) -> None:
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 
-    for cell in worksheet["F"][1:]:
+    for cell in worksheet["H"][1:]:
         if cell.value:
             cell.hyperlink = cell.value
             cell.style = "Hyperlink"
