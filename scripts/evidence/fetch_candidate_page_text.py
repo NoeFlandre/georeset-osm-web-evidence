@@ -15,8 +15,8 @@ def combine_queries_for_review(queries) -> str:
 
 def main() -> None:
     input_path = "data/processed/search/brave_candidate_urls_sample.parquet"
-    output_path = "data/processed/evidence/page_text_sample_5_trafilatura.parquet"
-    url_limit = 5
+    output_path = "data/processed/evidence/page_text_sample.parquet"
+    url_limit = None
     request_delay_seconds = 1.0
 
     candidate_urls_df = pd.read_parquet(input_path)

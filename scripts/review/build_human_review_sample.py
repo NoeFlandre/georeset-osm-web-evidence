@@ -10,8 +10,8 @@ from georeset_osm_web_evidence.review.human import (
 
 def main() -> None:
     input_path = "data/processed/evidence/page_text_sample.parquet"
-    csv_output_path = Path("data/review/human_review_sample.csv")
-    xlsx_output_path = Path("data/review/human_review_sample.xlsx")
+    csv_output_path = Path("data/review/trafilatura/human_review_sample.csv")
+    xlsx_output_path = Path("data/review/trafilatura/human_review_sample.xlsx")
 
     page_text_df = pd.read_parquet(input_path)
     review_df = build_human_review_dataframe(page_text_df)
