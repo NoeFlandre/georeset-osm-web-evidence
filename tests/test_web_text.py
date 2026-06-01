@@ -1,7 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from georeset_osm_web_evidence.web.text import extract_readable_text, fetch_page_text
+from georeset_osm_web_evidence.web.html import extract_readable_text
+from georeset_osm_web_evidence.web.text import fetch_page_text
 
 
 class FakeResponse:
@@ -9,6 +10,24 @@ class FakeResponse:
     status_code = 200
     headers = {"content-type": "text/html; charset=utf-8"}
     text = "<html><body><script>onlyJavascript()</script></body></html>"
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeReadableText:
+    url = "https://example.test/readable-page"
+    status_code = 200
+    headers = {"content-type": "text/html; charset=utf-8"}
+    text = """
+    <html>
+        <body>
+            <article>
+                <p>Forest evidence text about wetlands and trails.</p>
+            </article>
+        </body>
+    </html>
+    """
 
     def raise_for_status(self):
         return None
@@ -47,6 +66,16 @@ class ExtractReadableTextTests(unittest.TestCase):
 
         self.assertEqual(result["text_length"], 0)
         self.assertEqual(result["fetch_error"], "No readable text extracted")
+
+    def test_fetch_page_text_reports_extraction_method(self):
+        with patch("georeset_osm_web_evidence.web.text.requests.get") as get:
+            get.return_value = FakeReadableText()
+            result = fetch_page_text("https://example.test/readable-page")
+
+        self.assertIn("Forest evidence text", result["text"])
+        self.assertIsNone(result["fetch_error"])
+        self.assertIn(result["extraction_method"], {"trafilatura", "html_parser"})
+        self.assertIsNone(result["extraction_error"])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import trafilatura
 
-from georeset_osm_web_evidence.web.text import extract_readable_text
+from georeset_osm_web_evidence.web.html import extract_readable_text
 
 
 @dataclass
