@@ -1,6 +1,11 @@
 import unittest
 
-from georeset_osm_web_evidence.web.quality import analyze_text_quality
+import pandas as pd
+
+from georeset_osm_web_evidence.web.quality import (
+    add_quality_metadata,
+    analyze_text_quality,
+)
 
 
 class WebQualityTests(unittest.TestCase):
@@ -100,6 +105,31 @@ class WebQualityTests(unittest.TestCase):
         self.assertEqual(empty_result["quality_score"], 0.0)
         self.assertEqual(duplicate_result["quality_score"], 0.8)
         self.assertEqual(many_short_lines_result["quality_score"], 0.7)
+
+    def test_adds_quality_metadata_to_dataframe(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "url": "https://example.test/clean",
+                    "text": "forest path wetland\nriver bird habitat",
+                    "fetch_error": None,
+                },
+                {
+                    "url": "https://example.test/broken",
+                    "text": None,
+                    "fetch_error": "403 Forbidden",
+                },
+            ]
+        )
+
+        result = add_quality_metadata(df)
+
+        self.assertEqual(len(result), 2)
+        self.assertIn("quality_flags", result.columns)
+        self.assertIn("quality_score", result.columns)
+        self.assertEqual(result.loc[0, "quality_score"], 1.0)
+        self.assertEqual(result.loc[1, "quality_score"], 0.0)
+        self.assertIn("empty_text", result.loc[1, "quality_flags"])
 
 
 if __name__ == "__main__":

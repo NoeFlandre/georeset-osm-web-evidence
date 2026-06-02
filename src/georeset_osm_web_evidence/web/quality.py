@@ -1,6 +1,8 @@
 import re
 from collections import Counter
 
+import pandas as pd
+
 
 def split_non_empty_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
@@ -76,3 +78,20 @@ def analyze_text_quality(text: str) -> dict:
         "quality_flags": quality_flags,
         "quality_score": quality_score,
     }
+
+
+def add_quality_metadata(df: pd.DataFrame) -> pd.DataFrame:
+    result = df.copy()
+
+    quality_rows = result["text"].apply(
+        lambda text: analyze_text_quality(text if isinstance(text, str) else "")
+    )
+
+    quality_df = pd.DataFrame(quality_rows.to_list())
+
+    concat_df = pd.concat(
+        [result.reset_index(drop=True), quality_df.reset_index(drop=True)],
+        axis=1,
+    )
+
+    return concat_df
