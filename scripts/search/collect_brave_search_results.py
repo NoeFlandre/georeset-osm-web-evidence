@@ -1,10 +1,9 @@
 import time
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 
-from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.coverage import (
     build_expected_query_table,
     choose_unsearched_polygons,
@@ -12,6 +11,7 @@ from georeset_osm_web_evidence.search.coverage import (
     load_existing_search_attempts,
     load_existing_search_results,
 )
+from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.queries import get_osm_name
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
@@ -84,12 +84,13 @@ def main() -> None:
     input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
     output_path = "data/processed/search/brave_results_sample.parquet"
     attempts_path = "data/processed/search/brave_search_attempts.parquet"
-    new_polygon_limit = 10
-    complete_existing_polygons_only = True
+    new_polygon_limit = 81
+    complete_existing_polygons_only = False
     results_per_query = 5
     request_delay_seconds = 1.2
 
     gdf = load_geodataframe(input_path)
+
     existing_results_df = load_existing_search_results(output_path)
     existing_attempts_df = load_existing_search_attempts(attempts_path)
     gdf = choose_polygons_to_search(
@@ -99,6 +100,11 @@ def main() -> None:
         new_polygon_limit=new_polygon_limit,
         complete_existing_polygons_only=complete_existing_polygons_only,
     )
+
+    if gdf.empty:
+        print("No unsearched polygons left")
+        return
+
     missing_queries_df = find_missing_queries(
         build_expected_query_table(gdf),
         existing_results_df,
