@@ -24,7 +24,15 @@ def count_duplicate_lines(lines: list[str]) -> int:
 def compute_quality_score(quality_flags: list[str]) -> float:
     if "empty_text" in quality_flags:
         return 0.0
-    return 1.0
+
+    score = 1.0
+    if "many_short_lines" in quality_flags:
+        score -= 0.3
+
+    if "duplicate_lines" in quality_flags:
+        score -= 0.2
+
+    return max(score, 0.0)
 
 
 def analyze_text_quality(text: str) -> dict:
