@@ -63,6 +63,20 @@ class WebQualityTests(unittest.TestCase):
         self.assertEqual(result["duplicate_line_fraction"], 2 / 3)
         self.assertIn("duplicate_lines", result["quality_flags"])
 
+    def test_assigns_quality_score(self):
+        clean_text = """
+        The anatomy of the kākāpō typifies the tendency of bird evolution on oceanic islands.
+        With few predators and abundant food, kākāpō exhibit island syndrome development, having a generally robust torso physique at the expense of flight abilities, resulting in reduced shoulder and wing muscles, along with a diminished keel on the sternum.
+        """
+
+        empty_text = ""
+
+        clean_result = analyze_text_quality(clean_text)
+        empty_result = analyze_text_quality(empty_text)
+
+        self.assertEqual(clean_result["quality_score"], 1.0)
+        self.assertEqual(empty_result["quality_score"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

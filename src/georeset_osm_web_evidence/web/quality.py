@@ -21,6 +21,12 @@ def count_duplicate_lines(lines: list[str]) -> int:
     return duplicate_line_count
 
 
+def compute_quality_score(quality_flags: list[str]) -> float:
+    if "empty_text" in quality_flags:
+        return 0.0
+    return 1.0
+
+
 def analyze_text_quality(text: str) -> dict:
     lines = split_non_empty_lines(text)
     short_line_count = 0
@@ -51,6 +57,8 @@ def analyze_text_quality(text: str) -> dict:
         if short_line_fraction >= 0.5:
             quality_flags.append("many_short_lines")
 
+    quality_score = compute_quality_score(quality_flags)
+
     return {
         "line_count": line_count,
         "word_count": word_count,
@@ -58,4 +66,5 @@ def analyze_text_quality(text: str) -> dict:
         "duplicate_line_fraction": duplicate_line_fraction,
         "short_line_fraction": short_line_fraction,
         "quality_flags": quality_flags,
+        "quality_score": quality_score,
     }
