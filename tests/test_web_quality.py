@@ -47,6 +47,22 @@ class WebQualityTests(unittest.TestCase):
         self.assertEqual(result["duplicate_line_fraction"], 0)
         self.assertIn("empty_text", result["quality_flags"])
 
+    def test_detects_duplicate_lines(self):
+        text = """
+        This is an example of line
+        This is an example of line
+        This is once again another line
+        """
+
+        result = analyze_text_quality(text)
+
+        self.assertEqual(result["word_count"], 18)
+        self.assertEqual(result["line_count"], 3)
+        self.assertEqual(result["mean_words_per_line"], 6)
+        self.assertEqual(result["short_line_fraction"], 0)
+        self.assertEqual(result["duplicate_line_fraction"], 2 / 3)
+        self.assertIn("duplicate_lines", result["quality_flags"])
+
 
 if __name__ == "__main__":
     unittest.main()

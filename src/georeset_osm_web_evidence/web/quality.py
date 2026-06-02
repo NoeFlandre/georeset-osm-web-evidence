@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 
 
 def split_non_empty_lines(text: str) -> list[str]:
@@ -7,6 +8,17 @@ def split_non_empty_lines(text: str) -> list[str]:
 
 def count_words(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text))
+
+
+def count_duplicate_lines(lines: list[str]) -> int:
+    counts = Counter(lines)
+    duplicate_line_count = 0
+
+    for line in lines:
+        if counts[line] > 1:
+            duplicate_line_count += 1
+
+    return duplicate_line_count
 
 
 def analyze_text_quality(text: str) -> dict:
@@ -20,10 +32,15 @@ def analyze_text_quality(text: str) -> dict:
     if line_count == 0:
         mean_words_per_line = 0
         short_line_fraction = 0
+        duplicate_line_fraction = 0
         quality_flags.append("empty_text")
 
     else:
         mean_words_per_line = word_count / line_count
+        duplicate_lines_count = count_duplicate_lines(lines)
+        duplicate_line_fraction = duplicate_lines_count / line_count
+        if duplicate_line_fraction != 0:
+            quality_flags.append("duplicate_lines")
 
         for line in lines:
             words_per_line = count_words(line)
@@ -38,7 +55,7 @@ def analyze_text_quality(text: str) -> dict:
         "line_count": line_count,
         "word_count": word_count,
         "mean_words_per_line": mean_words_per_line,
-        "duplicate_line_fraction": 0,
+        "duplicate_line_fraction": duplicate_line_fraction,
         "short_line_fraction": short_line_fraction,
         "quality_flags": quality_flags,
     }
