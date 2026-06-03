@@ -20,6 +20,10 @@ class TestSentences(unittest.TestCase):
             ],
         )
 
+    def test_empty_text_returns_empty_list(self):
+        self.assertEqual(split_sentences(""), [])
+        self.assertEqual(split_sentences("  \n  "), [])
+
 
 if __name__ == "__main__":
     unittest.main()
