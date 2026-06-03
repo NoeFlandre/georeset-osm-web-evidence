@@ -5,15 +5,8 @@ import pandas as pd
 from georeset_osm_web_evidence.text.sentences import extract_sentence_candidates
 
 
-def main():
-    input_path = Path(
-        "data/processed/evidence/page_text_sample_with_quality_metadata.parquet"
-    )
-    output_path = Path("data/processed/evidence/sentence_candidates.parquet")
-
+def build_sentence_candidate_dataframe(text_df: pd.DataFrame) -> pd.DataFrame:
     sentence_rows = []
-
-    text_df = pd.read_parquet(input_path)
 
     for _, row in text_df.iterrows():
         text = row["text"]
@@ -43,6 +36,19 @@ def main():
             )
 
     sentence_df = pd.DataFrame(sentence_rows)
+    return sentence_df
+
+
+def main():
+    input_path = Path(
+        "data/processed/evidence/page_text_sample_with_quality_metadata.parquet"
+    )
+    output_path = Path("data/processed/evidence/sentence_candidates.parquet")
+
+    text_df = pd.read_parquet(input_path)
+
+    sentence_df = build_sentence_candidate_dataframe(text_df)
+
     sentence_df.to_parquet(output_path)
     print(
         f"Extracted {len(sentence_df)} sentences from {sentence_df['url'].nunique()} URLs"
