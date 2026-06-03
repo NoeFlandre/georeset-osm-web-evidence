@@ -28,7 +28,16 @@ def main():
                     "osm_type": row["osm_type"],
                     "osm_id": row["osm_id"],
                     "polygon_name": row["polygon_name"],
+                    "has_wikipedia_articles": row["has_wikipedia_articles"],
                     "url": row["url"],
+                    "final_url": row["final_url"],
+                    "search_title": row["search_title"],
+                    "search_description": row["search_description"],
+                    "search_queries": row["search_queries"],
+                    "page_title": row["title"],
+                    "text_length": row["text_length"],
+                    "quality_score": row["quality_score"],
+                    "quality_flags": row["quality_flags"],
                     "sentence": sentence,
                 }
             )
