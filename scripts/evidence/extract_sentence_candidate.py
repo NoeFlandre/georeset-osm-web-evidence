@@ -44,6 +44,9 @@ def main():
 
     sentence_df = pd.DataFrame(sentence_rows)
     sentence_df.to_parquet(output_path)
+    print(
+        f"Extracted {len(sentence_df)} sentences from {sentence_df['url'].nunique()} URLs"
+    )
     print(f"Saved the sentence dataframe to {output_path}")
 
 
