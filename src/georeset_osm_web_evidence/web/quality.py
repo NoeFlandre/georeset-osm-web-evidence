@@ -1,15 +1,12 @@
-import re
 from collections import Counter
 
 import pandas as pd
 
+from georeset_osm_web_evidence.text.utils import count_words
+
 
 def split_non_empty_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
-
-
-def count_words(text: str) -> int:
-    return len(re.findall(r"\b\w+\b", text))
 
 
 def count_duplicate_lines(lines: list[str]) -> int:

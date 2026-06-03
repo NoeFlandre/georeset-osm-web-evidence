@@ -1,6 +1,9 @@
 import unittest
 
-from georeset_osm_web_evidence.text.sentences import split_sentences
+from georeset_osm_web_evidence.text.sentences import (
+    is_sentence_candidate,
+    split_sentences,
+)
 
 
 class TestSentences(unittest.TestCase):
@@ -23,6 +26,14 @@ class TestSentences(unittest.TestCase):
     def test_empty_text_returns_empty_list(self):
         self.assertEqual(split_sentences(""), [])
         self.assertEqual(split_sentences("  \n  "), [])
+
+    def test_filters_sentence_based_on_word_count(self):
+        self.assertFalse(is_sentence_candidate("Too short"))
+        self.assertTrue(
+            is_sentence_candidate(
+                "This sentence is a valid candidate because it has enough words."
+            )
+        )
 
 
 if __name__ == "__main__":
