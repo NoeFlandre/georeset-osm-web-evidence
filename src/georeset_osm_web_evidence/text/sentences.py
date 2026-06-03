@@ -21,3 +21,16 @@ def is_sentence_candidate(
     if word_count > max_word_count:
         return False
     return True
+
+
+def extract_sentence_candidates(
+    text: str,
+    min_word_count: int = 8,
+    max_word_count: int = 80,
+) -> list[str]:
+    sentences = split_sentences(text)
+    return [
+        sentence
+        for sentence in sentences
+        if is_sentence_candidate(sentence, min_word_count, max_word_count)
+    ]

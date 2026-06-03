@@ -1,6 +1,7 @@
 import unittest
 
 from georeset_osm_web_evidence.text.sentences import (
+    extract_sentence_candidates,
     is_sentence_candidate,
     split_sentences,
 )
@@ -33,6 +34,23 @@ class TestSentences(unittest.TestCase):
             is_sentence_candidate(
                 "This sentence is a valid candidate because it has enough words."
             )
+        )
+
+    def test_extracts_candidate_sentences(self):
+        text = """
+        Home.
+        This is a sentence which I would like to keep because it is long enough.
+        Menu.
+        This is another sentence that I would like to be kept since it is valuable.
+        """
+        sentence_candidates = extract_sentence_candidates(text)
+
+        self.assertEqual(
+            sentence_candidates,
+            [
+                "This is a sentence which I would like to keep because it is long enough.",
+                "This is another sentence that I would like to be kept since it is valuable.",
+            ],
         )
 
 
