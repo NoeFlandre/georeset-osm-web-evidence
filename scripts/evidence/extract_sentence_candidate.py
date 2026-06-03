@@ -2,9 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from georeset_osm_web_evidence.text.sentences import (
+from georeset_osm_web_evidence.evidence.sentence_candidates import (
     build_sentence_candidate_dataframe,
-    extract_sentence_candidates,
 )
 
 
