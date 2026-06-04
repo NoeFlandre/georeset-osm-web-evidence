@@ -24,6 +24,10 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 ## Evidence
 
 - `evidence/fetch_candidate_page_text.py` fetches candidate URLs, extracts readable page text, and saves `data/processed/evidence/page_text_sample.parquet`.
+- `evidence/add_quality_metadata.py` computes page-level text quality metadata and writes `data/processed/evidence/page_text_sample_with_quality_metadata.parquet`.
+- `evidence/summarize_polygon_evidence.py` summarizes candidate URL, fetch, and high-quality evidence counts per polygon.
+- `evidence/extract_sentence_candidate.py` converts fetched page text into sentence-level candidate rows.
+- `evidence/sample_sentence_candidates.py` samples high-quality sentence candidates for manual inspection or future LLM labeling.
 
 ## Review
 
