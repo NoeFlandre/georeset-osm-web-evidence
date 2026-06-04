@@ -28,6 +28,7 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 - `evidence/summarize_polygon_evidence.py` summarizes candidate URL, fetch, and high-quality evidence counts per polygon.
 - `evidence/extract_sentence_candidate.py` converts fetched page text into sentence-level candidate rows.
 - `evidence/sample_sentence_candidates.py` samples high-quality sentence candidates for manual inspection or future LLM labeling.
+- `evidence/build_labeling_candidates.py` deduplicates high-quality sentence candidates, assigns stable IDs, and writes parquet plus JSONL inputs for future LLM labeling.
 
 ## Review
 
