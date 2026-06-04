@@ -1,13 +1,13 @@
+from georeset_osm_web_evidence.search.config import (
+    BALANCED_POLYGONS_PATH,
+    SEARCH_LANGUAGES,
+)
 from georeset_osm_web_evidence.search.queries import build_search_queries
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
-SEARCH_LANGUAGES = ["fr", "en"]
-
 
 def main():
-    input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
-
-    gdf = load_geodataframe(input_path)
+    gdf = load_geodataframe(BALANCED_POLYGONS_PATH)
 
     for index, row in enumerate(gdf.itertuples()):
         osm_tags = row.osm_tags

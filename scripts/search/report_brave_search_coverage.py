@@ -1,5 +1,11 @@
 import pandas as pd
 
+from georeset_osm_web_evidence.search.config import (
+    BALANCED_POLYGONS_PATH,
+    BRAVE_ATTEMPTS_PATH,
+    BRAVE_RESULTS_PATH,
+    SEARCH_LANGUAGES,
+)
 from georeset_osm_web_evidence.search.coverage import (
     load_existing_search_attempts,
     load_existing_search_results,
@@ -8,17 +14,11 @@ from georeset_osm_web_evidence.search.coverage import (
 )
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
-SEARCH_LANGUAGES = ["fr", "en"]
-
 
 def main() -> None:
-    polygons_path = "data/processed/samples/balanced_wikipedia_100.parquet"
-    search_results_path = "data/processed/search/brave_results_sample.parquet"
-    attempts_path = "data/processed/search/brave_search_attempts.parquet"
-
-    polygons_gdf = load_geodataframe(polygons_path)
-    search_results_df = load_existing_search_results(search_results_path)
-    attempts_df = load_existing_search_attempts(attempts_path)
+    polygons_gdf = load_geodataframe(BALANCED_POLYGONS_PATH)
+    search_results_df = load_existing_search_results(BRAVE_RESULTS_PATH)
+    attempts_df = load_existing_search_attempts(BRAVE_ATTEMPTS_PATH)
 
     summary = summarize_search_coverage(
         polygons_gdf,

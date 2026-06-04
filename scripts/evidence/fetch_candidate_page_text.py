@@ -3,23 +3,17 @@ from pathlib import Path
 
 import pandas as pd
 
+from georeset_osm_web_evidence.evidence.page_text import build_page_text_row
+from georeset_osm_web_evidence.search.config import BRAVE_CANDIDATE_URLS_PATH
 from georeset_osm_web_evidence.web.text import fetch_page_text
 
 
-def combine_queries_for_review(queries) -> str:
-    if queries is None:
-        return ""
-
-    return "; ".join(str(query) for query in queries)
-
-
 def main() -> None:
-    input_path = "data/processed/search/brave_candidate_urls_sample.parquet"
     output_path = "data/processed/evidence/page_text_sample.parquet"
     url_limit = None
     request_delay_seconds = 1.0
 
-    candidate_urls_df = pd.read_parquet(input_path)
+    candidate_urls_df = pd.read_parquet(BRAVE_CANDIDATE_URLS_PATH)
 
     if url_limit is not None:
         candidate_urls_df = candidate_urls_df.head(url_limit)
@@ -30,21 +24,7 @@ def main() -> None:
         print(f"Fetching URL {index}/{len(candidate_urls_df)}: {row.url}")
 
         page_text = fetch_page_text(row.url)
-
-        rows.append(
-            {
-                "osm_type": row.osm_type,
-                "osm_id": row.osm_id,
-                "polygon_name": row.polygon_name,
-                "has_wikipedia_articles": row.has_wikipedia_articles,
-                "provider": row.provider,
-                "source_url": row.url,
-                "search_title": row.title,
-                "search_description": row.description,
-                "search_queries": combine_queries_for_review(row.queries),
-                **page_text,
-            }
-        )
+        rows.append(build_page_text_row(row, page_text))
 
         time.sleep(request_delay_seconds)
 

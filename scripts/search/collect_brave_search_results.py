@@ -1,9 +1,14 @@
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pandas as pd
 
+from georeset_osm_web_evidence.search.config import (
+    BALANCED_POLYGONS_PATH,
+    BRAVE_ATTEMPTS_PATH,
+    BRAVE_RESULTS_PATH,
+    SEARCH_LANGUAGES,
+)
 from georeset_osm_web_evidence.search.coverage import (
     build_expected_query_table,
     choose_unsearched_polygons,
@@ -14,8 +19,6 @@ from georeset_osm_web_evidence.search.coverage import (
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.queries import get_osm_name
 from georeset_osm_web_evidence.storage.local import load_geodataframe
-
-SEARCH_LANGUAGES = ["fr", "en"]
 
 
 def result_to_row(
@@ -83,18 +86,15 @@ def choose_polygons_to_search(
 
 
 def main() -> None:
-    input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
-    output_path = "data/processed/search/brave_results_sample.parquet"
-    attempts_path = "data/processed/search/brave_search_attempts.parquet"
     new_polygon_limit = 81
     complete_existing_polygons_only = False
     results_per_query = 5
     request_delay_seconds = 1.2
 
-    gdf = load_geodataframe(input_path)
+    gdf = load_geodataframe(BALANCED_POLYGONS_PATH)
 
-    existing_results_df = load_existing_search_results(output_path)
-    existing_attempts_df = load_existing_search_attempts(attempts_path)
+    existing_results_df = load_existing_search_results(BRAVE_RESULTS_PATH)
+    existing_attempts_df = load_existing_search_attempts(BRAVE_ATTEMPTS_PATH)
     gdf = choose_polygons_to_search(
         gdf,
         existing_results_df,
@@ -154,8 +154,8 @@ def main() -> None:
 
             time.sleep(request_delay_seconds)
 
-    output_path = Path(output_path)
-    attempts_path = Path(attempts_path)
+    output_path = BRAVE_RESULTS_PATH
+    attempts_path = BRAVE_ATTEMPTS_PATH
     output_path.parent.mkdir(parents=True, exist_ok=True)
     attempts_path.parent.mkdir(parents=True, exist_ok=True)
 

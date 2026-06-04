@@ -1,6 +1,9 @@
-from pathlib import Path
-
 import pandas as pd
+
+from georeset_osm_web_evidence.search.config import (
+    BRAVE_CANDIDATE_URLS_PATH,
+    BRAVE_RESULTS_PATH,
+)
 
 
 def is_wikipedia_url(url: str) -> bool:
@@ -12,10 +15,7 @@ def combine_unique_values(values) -> list[str]:
 
 
 def main() -> None:
-    input_path = "data/processed/search/brave_results_sample.parquet"
-    output_path = "data/processed/search/brave_candidate_urls_sample.parquet"
-
-    results_df = pd.read_parquet(input_path)
+    results_df = pd.read_parquet(BRAVE_RESULTS_PATH)
     raw_result_count = len(results_df)
     results_df = results_df[~results_df["url"].apply(is_wikipedia_url)].copy()
 
@@ -40,11 +40,11 @@ def main() -> None:
         )
     )
 
-    output_path = Path(output_path)
+    output_path = BRAVE_CANDIDATE_URLS_PATH
     output_path.parent.mkdir(parents=True, exist_ok=True)
     candidate_urls_df.to_parquet(output_path, index=False)
 
-    print(f"Loaded {raw_result_count} search result rows from {input_path}")
+    print(f"Loaded {raw_result_count} search result rows from {BRAVE_RESULTS_PATH}")
     print(f"Kept {len(results_df)} rows after removing Wikipedia URLs")
     print(f"Saved {len(candidate_urls_df)} candidate URLs to {output_path}")
     print(candidate_urls_df[["polygon_name", "best_rank", "url"]].head(20))
