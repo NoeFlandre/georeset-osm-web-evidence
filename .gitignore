@@ -10,3 +10,12 @@ wheels/
 .venv
 data/
 .DS_Store
+
+# Local Grid'5000 launchers, logs, and machine-specific notes
+.grid5000/
+grid5000-local/
+g5k-local/
+*.oar
+*.oar.log
+*.oar.out
+*.oar.err

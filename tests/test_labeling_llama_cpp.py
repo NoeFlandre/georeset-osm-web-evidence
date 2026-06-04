@@ -5,10 +5,15 @@ from tempfile import TemporaryDirectory
 import pandas as pd
 
 from georeset_osm_web_evidence.labeling.llama_cpp import (
+    DEFAULT_ENABLE_THINKING,
     DEFAULT_FILENAME,
+    DEFAULT_N_CTX,
+    DEFAULT_N_GPU_LAYERS,
     DEFAULT_REPO_ID,
+    apply_chat_template_kwargs,
     create_llama_cpp_label_fn,
     extract_chat_completion_text,
+    get_llama_cpp_model_settings_from_env,
     load_llama_cpp_model,
 )
 from scripts.labeling.run_llama_cpp_labeling_sample import (
@@ -42,6 +47,38 @@ class FakeLlama:
 
 
 class LlamaCppProviderTests(unittest.TestCase):
+    def test_reads_model_settings_from_environment(self):
+        env = {
+            "GEORESET_LLAMA_REPO_ID": "example/model",
+            "GEORESET_LLAMA_FILENAME": "model-q4.gguf",
+            "GEORESET_LLAMA_N_GPU_LAYERS": "32",
+            "GEORESET_LLAMA_N_CTX": "4096",
+            "GEORESET_LLAMA_VERBOSE": "1",
+            "GEORESET_LLAMA_ENABLE_THINKING": "0",
+        }
+
+        settings = get_llama_cpp_model_settings_from_env(env)
+
+        self.assertEqual(settings["repo_id"], "example/model")
+        self.assertEqual(settings["filename"], "model-q4.gguf")
+        self.assertEqual(settings["model_kwargs"]["n_gpu_layers"], 32)
+        self.assertEqual(settings["model_kwargs"]["n_ctx"], 4096)
+        self.assertEqual(settings["model_kwargs"]["verbose"], True)
+        self.assertEqual(settings["chat_template_kwargs"]["enable_thinking"], False)
+
+    def test_model_settings_defaults_target_qwen_smoke_test(self):
+        settings = get_llama_cpp_model_settings_from_env({})
+
+        self.assertEqual(settings["repo_id"], DEFAULT_REPO_ID)
+        self.assertEqual(settings["filename"], DEFAULT_FILENAME)
+        self.assertEqual(settings["model_kwargs"]["n_gpu_layers"], DEFAULT_N_GPU_LAYERS)
+        self.assertEqual(settings["model_kwargs"]["n_ctx"], DEFAULT_N_CTX)
+        self.assertEqual(settings["model_kwargs"]["verbose"], False)
+        self.assertEqual(
+            settings["chat_template_kwargs"]["enable_thinking"],
+            DEFAULT_ENABLE_THINKING,
+        )
+
     def test_loads_default_unsloth_qwen_model_lazily(self):
         llm = load_llama_cpp_model(
             llama_class=FakeLlama,
@@ -68,10 +105,7 @@ class LlamaCppProviderTests(unittest.TestCase):
         call = llm.calls[0]
         self.assertEqual(call["temperature"], 0.0)
         self.assertEqual(call["max_tokens"], 8)
-        self.assertEqual(
-            call["chat_template_kwargs"],
-            {"enable_thinking": False},
-        )
+        self.assertNotIn("chat_template_kwargs", call)
         self.assertEqual(
             call["messages"],
             [
@@ -81,6 +115,25 @@ class LlamaCppProviderTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_applies_chat_template_kwargs_to_chat_handler(self):
+        calls = []
+
+        def base_chat_handler(*args, **kwargs):
+            calls.append(kwargs)
+            return {"choices": [{"message": {"content": "relevant"}}]}
+
+        class FakeModel:
+            chat_handler = base_chat_handler
+
+        model = FakeModel()
+
+        apply_chat_template_kwargs(model, {"enable_thinking": False})
+        response = model.chat_handler(messages=[], enable_thinking=True)
+
+        self.assertEqual(response["choices"][0]["message"]["content"], "relevant")
+        self.assertEqual(calls[0]["enable_thinking"], True)
+        self.assertEqual(calls[0]["messages"], [])
 
     def test_extracts_chat_completion_text(self):
         response = {

@@ -5,6 +5,7 @@ import pandas as pd
 
 from georeset_osm_web_evidence.labeling.llama_cpp import (
     create_llama_cpp_label_fn,
+    get_llama_cpp_model_settings_from_env,
     load_llama_cpp_model,
 )
 from georeset_osm_web_evidence.labeling.runner import label_prompt_rows
@@ -27,10 +28,12 @@ def run_llama_cpp_labeling_sample(
     prompt_df = pd.read_parquet(input_path).head(sample_size).copy()
 
     if label_fn is None:
+        model_settings = get_llama_cpp_model_settings_from_env()
         llm = load_llama_cpp_model(
-            n_gpu_layers=-1,
-            n_ctx=8192,
-            verbose=False,
+            repo_id=model_settings["repo_id"],
+            filename=model_settings["filename"],
+            chat_template_kwargs=model_settings["chat_template_kwargs"],
+            **model_settings["model_kwargs"],
         )
         label_fn = create_llama_cpp_label_fn(llm)
 
