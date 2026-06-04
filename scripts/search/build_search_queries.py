@@ -1,6 +1,8 @@
 from georeset_osm_web_evidence.search.queries import build_search_queries
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
+SEARCH_LANGUAGES = ["fr", "en"]
+
 
 def main():
     input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
@@ -9,7 +11,7 @@ def main():
 
     for index, row in enumerate(gdf.itertuples()):
         osm_tags = row.osm_tags
-        queries = build_search_queries(osm_tags)
+        queries = build_search_queries(osm_tags, search_languages=SEARCH_LANGUAGES)
         print(f"Index: {index}, Queries: {queries}")
 
 

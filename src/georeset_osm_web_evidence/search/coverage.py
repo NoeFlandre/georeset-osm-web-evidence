@@ -49,13 +49,19 @@ def query_keys(df: pd.DataFrame) -> pd.DataFrame:
     return df[QUERY_KEY].drop_duplicates()
 
 
-def build_expected_query_table(polygons_df: pd.DataFrame) -> pd.DataFrame:
+def build_expected_query_table(
+    polygons_df: pd.DataFrame,
+    search_languages: list[str] | tuple[str, ...] = ("fr",),
+) -> pd.DataFrame:
     rows = []
 
     for polygon_row in polygons_df.itertuples():
         polygon_name = get_osm_name(polygon_row.osm_tags)
 
-        for query in build_search_queries(polygon_row.osm_tags):
+        for query in build_search_queries(
+            polygon_row.osm_tags,
+            search_languages=search_languages,
+        ):
             rows.append(
                 {
                     "osm_type": polygon_row.osm_type,
@@ -94,6 +100,7 @@ def summarize_search_coverage(
     polygons_df: pd.DataFrame,
     search_results_df: pd.DataFrame,
     attempted_polygons_df: pd.DataFrame | None = None,
+    search_languages: list[str] | tuple[str, ...] = ("fr",),
 ) -> dict:
     total_polygons = len(polygon_keys(polygons_df))
     searched_keys = polygon_keys(search_results_df)
@@ -114,7 +121,10 @@ def summarize_search_coverage(
     missing_queries = None
 
     if "osm_tags" in polygons_df.columns:
-        expected_queries_df = build_expected_query_table(polygons_df)
+        expected_queries_df = build_expected_query_table(
+            polygons_df,
+            search_languages=search_languages,
+        )
         expected_queries = len(expected_queries_df)
         missing_queries = len(
             find_missing_queries(

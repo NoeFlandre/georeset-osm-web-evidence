@@ -1,10 +1,4 @@
-from georeset_osm_web_evidence.search.terms import (
-    AGRICULTURE_TERMS,
-    DEFAULT_TERMS,
-    FOREST_TERMS,
-    PROTECTED_AREA_TERMS,
-    WETLAND_TERMS,
-)
+from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
 
 
 def clean_tags(osm_tags: dict) -> dict:
@@ -46,21 +40,28 @@ def classify_polygon(osm_tags: dict) -> str:
     return "default"
 
 
-def get_query_terms(category: str) -> list[str]:
-    if category == "forest":
-        return FOREST_TERMS
-    if category == "agriculture":
-        return AGRICULTURE_TERMS
-    if category == "wetland":
-        return WETLAND_TERMS
-    if category == "protected_area":
-        return PROTECTED_AREA_TERMS
-    return DEFAULT_TERMS
+def get_query_terms(category: str, language: str = "fr") -> list[str]:
+    if language not in TERMS_BY_LANGUAGE:
+        supported_languages = ", ".join(sorted(TERMS_BY_LANGUAGE))
+        raise ValueError(
+            f"Unsupported search language '{language}'. "
+            f"Supported languages: {supported_languages}"
+        )
+
+    terms_by_category = TERMS_BY_LANGUAGE[language]
+    return terms_by_category.get(category, terms_by_category["default"])
 
 
-def build_search_queries(osm_tags: dict) -> list[str]:
+def build_search_queries(
+    osm_tags: dict,
+    search_languages: list[str] | tuple[str, ...] = ("fr",),
+) -> list[str]:
     name = get_osm_name(osm_tags)
     category = classify_polygon(osm_tags)
-    terms = get_query_terms(category)
+    queries = []
 
-    return [f'"{name}" {term}' for term in terms]
+    for language in search_languages:
+        terms = get_query_terms(category, language=language)
+        queries.extend([f'"{name}" {term}' for term in terms])
+
+    return list(dict.fromkeys(queries))

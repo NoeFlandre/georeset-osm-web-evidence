@@ -15,6 +15,8 @@ from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.queries import get_osm_name
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
+SEARCH_LANGUAGES = ["fr", "en"]
+
 
 def result_to_row(
     polygon_row,
@@ -106,7 +108,7 @@ def main() -> None:
         return
 
     missing_queries_df = find_missing_queries(
-        build_expected_query_table(gdf),
+        build_expected_query_table(gdf, search_languages=SEARCH_LANGUAGES),
         existing_results_df,
         attempted_queries_df=existing_attempts_df,
     )

@@ -15,10 +15,10 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 
 ## Search
 
-- `search/build_search_queries.py` prints tag-aware, name-based web search queries for the balanced sample.
-- `search/search_brave_sample.py` runs a small Brave Search smoke test on a few generated queries. Requires `BRAVE_SEARCH_API_KEY`.
-- `search/report_brave_search_coverage.py` reports which balanced polygons already have Brave Search results or logged Brave attempts.
-- `search/collect_brave_search_results.py` appends Brave Search results for a balanced set of unsearched polygons, logs attempted polygons, and saves normalized result rows to `data/processed/search/brave_results_sample.parquet`. Requires `BRAVE_SEARCH_API_KEY`.
+- `search/build_search_queries.py` prints tag-aware, name-based web search queries for the balanced sample, currently in French and English.
+- `search/search_brave_sample.py` runs a small Brave Search smoke test on a few generated French/English queries. Requires `BRAVE_SEARCH_API_KEY`.
+- `search/report_brave_search_coverage.py` reports which balanced polygons already have Brave Search results or logged Brave attempts, using the configured French/English query set.
+- `search/collect_brave_search_results.py` appends Brave Search results for a balanced set of unsearched polygons, logs attempted polygons, and saves normalized result rows to `data/processed/search/brave_results_sample.parquet`. It currently uses French and English queries. Requires `BRAVE_SEARCH_API_KEY`.
 - `search/prepare_search_result_urls.py` deduplicates Brave Search results into candidate evidence URLs and removes Wikipedia URLs.
 
 ## Evidence

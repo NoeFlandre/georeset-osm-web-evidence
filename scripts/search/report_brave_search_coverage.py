@@ -8,6 +8,8 @@ from georeset_osm_web_evidence.search.coverage import (
 )
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
+SEARCH_LANGUAGES = ["fr", "en"]
+
 
 def main() -> None:
     polygons_path = "data/processed/samples/balanced_wikipedia_100.parquet"
@@ -22,6 +24,7 @@ def main() -> None:
         polygons_gdf,
         search_results_df,
         attempted_polygons_df=attempts_df,
+        search_languages=SEARCH_LANGUAGES,
     )
     unsearched_df = unsearched_polygons(
         polygons_gdf,

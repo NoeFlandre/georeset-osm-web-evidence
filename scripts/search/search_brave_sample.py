@@ -4,6 +4,8 @@ from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.queries import build_search_queries
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
+SEARCH_LANGUAGES = ["fr", "en"]
+
 
 def main() -> None:
     input_path = "data/processed/samples/balanced_wikipedia_100.parquet"
@@ -14,7 +16,7 @@ def main() -> None:
 
     for row in gdf.head(polygon_count).itertuples():
         name = row.osm_tags["name"]
-        query = build_search_queries(row.osm_tags)[0]
+        query = build_search_queries(row.osm_tags, search_languages=SEARCH_LANGUAGES)[0]
         results = search_brave(query, count=result_count)
 
         print()

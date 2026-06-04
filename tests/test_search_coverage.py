@@ -111,6 +111,35 @@ class SearchCoverageTests(unittest.TestCase):
         self.assertNotIn('"Forest A" forêt', missing["query"].to_list())
         self.assertNotIn('"Marsh B" zone humide', missing["query"].to_list())
 
+    def test_builds_expected_queries_for_explicit_search_languages(self):
+        polygons = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": True,
+                    "osm_tags": {"name": "Forest A", "landuse": "forest"},
+                },
+            ]
+        )
+
+        expected = build_expected_query_table(polygons, search_languages=["fr", "en"])
+
+        self.assertEqual(
+            expected["query"].to_list(),
+            [
+                '"Forest A" forêt',
+                '"Forest A" biodiversité',
+                '"Forest A" gestion forestière',
+                '"Forest A" environnement',
+                '"Forest A" forest',
+                '"Forest A" biodiversity',
+                '"Forest A" forest management',
+                '"Forest A" environment',
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
