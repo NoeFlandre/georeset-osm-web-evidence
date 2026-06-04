@@ -33,6 +33,7 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 ## Labeling
 
 - `labeling/build_labeling_prompt_sample.py` prepares a small parquet and JSONL batch of binary `relevant`/`irrelevant` prompts from existing sentence-level labeling candidates. It does not call an LLM.
+- `labeling/run_llama_cpp_labeling_sample.py` labels a tiny prompt batch with the configured Qwen GGUF through `llama-cpp-python`. This is intended for a remote GPU machine and requires `llama-cpp-python` plus the model there.
 
 ## Review
 
