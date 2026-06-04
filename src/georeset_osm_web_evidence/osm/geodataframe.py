@@ -1,4 +1,8 @@
 import geopandas as gpd
+from pyproj import Geod
+
+
+WGS84_GEOD = Geod(ellps="WGS84")
 
 
 def records_to_geodataframe(records: list[dict]) -> gpd.GeoDataFrame:
@@ -14,6 +18,20 @@ def add_area_km2(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     metric_gdf = gdf.to_crs("EPSG:2154")
     gdf["area_km2"] = metric_gdf.area / 1_000_000
+
+    return gdf
+
+
+def add_geodesic_area_km2(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    gdf = gdf.copy()
+    gdf = gdf.to_crs("EPSG:4326")
+
+    areas_km2 = []
+    for geometry in gdf.geometry:
+        area_m2, _ = WGS84_GEOD.geometry_area_perimeter(geometry)
+        areas_km2.append(abs(area_m2) / 1_000_000)
+
+    gdf["area_km2"] = areas_km2
 
     return gdf
 

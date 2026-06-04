@@ -10,6 +10,7 @@ dependencies = [
     "huggingface-hub>=1.17.0",
     "openpyxl>=3.1.5",
     "pyarrow>=24.0.0",
+    "pyproj>=3.7.1",
     "requests>=2.34.2",
     "shapely>=2.1.2",
     "trafilatura>=2.0.0",

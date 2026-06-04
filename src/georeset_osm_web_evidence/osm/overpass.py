@@ -11,10 +11,12 @@ def build_polygon_query(
     north: float,
     east: float,
     tags: list[tuple[str, str]],
+    require_name: bool = False,
 ) -> str:
+    name_filter = '["name"]' if require_name else ""
     tag_filters = "\n".join(
-        f' way["{key}"="{value}"]({south},{west},{north},{east});\n'  # a way is a single closed polygon
-        f' relation["{key}"="{value}"]({south},{west},{north},{east});'  # a relation is more complex polygon, often having holes or multiple parts
+        f' way["{key}"="{value}"]{name_filter}({south},{west},{north},{east});\n'  # a way is a single closed polygon
+        f' relation["{key}"="{value}"]{name_filter}({south},{west},{north},{east});'  # a relation is more complex polygon, often having holes or multiple parts
         for key, value in tags
     )
     # we want the results back within 240s as a json of the gemoetry and the tags

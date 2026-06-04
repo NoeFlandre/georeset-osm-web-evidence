@@ -8,19 +8,26 @@ def main() -> None:
 
     gdf = load_geodataframe(input_path)
 
-    map_gdf = gdf[
-        [
-            "osm_type",
-            "osm_id",
-            "area_km2",
-            "centroid_lon",
-            "centroid_lat",
-            "has_wikipedia_articles",
-            "geometry",
-        ]
-    ].copy()
+    map_columns = [
+        "polygon_name",
+        "osm_type",
+        "osm_id",
+        "osm_tags",
+        "area_km2",
+        "centroid_lon",
+        "centroid_lat",
+        "has_wikipedia_articles",
+        "geometry",
+    ]
+    available_columns = [column for column in map_columns if column in gdf.columns]
+    map_gdf = gdf[available_columns].copy()
 
-    create_polygon_map(map_gdf, output_path)
+    create_polygon_map(
+        map_gdf,
+        output_path,
+        color_by="has_wikipedia_articles",
+        title="Balanced Wikipedia polygon sample",
+    )
 
 
 if __name__ == "__main__":
