@@ -30,6 +30,10 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 - `evidence/sample_sentence_candidates.py` samples high-quality sentence candidates for manual inspection or future LLM labeling.
 - `evidence/build_labeling_candidates.py` deduplicates high-quality sentence candidates, assigns stable IDs, and writes parquet plus JSONL inputs for future LLM labeling.
 
+## Labeling
+
+- `labeling/build_labeling_prompt_sample.py` prepares a small parquet and JSONL batch of binary `relevant`/`irrelevant` prompts from existing sentence-level labeling candidates. It does not call an LLM.
+
 ## Review
 
 - `review/build_human_review_sample.py` converts successful fetched page text into a reviewer-friendly, capped-per-polygon CSV with empty human label and notes columns.
