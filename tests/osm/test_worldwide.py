@@ -220,6 +220,54 @@ class OsmWorldwideTests(unittest.TestCase):
             "Europe": 3,
         })
 
+    def test_sample_worldwide_polygons_prioritizes_region_balance_over_area_bins(self) -> None:
+        rows = []
+        area_bins_by_region = {
+            "Africa": ["small", "medium"],
+            "Asia": ["small", "medium", "large", "tiny"],
+            "Europe": ["small", "medium", "large", "tiny"],
+        }
+        for region, area_bins in area_bins_by_region.items():
+            for area_bin in area_bins:
+                for polygon_index in range(6):
+                    lon = len(rows)
+                    rows.append(
+                        {
+                            "bbox_id": f"{region}-{area_bin}-{polygon_index}",
+                            "world_region": region,
+                            "area_size_bin": area_bin,
+                            "osm_type": "way",
+                            "osm_id": f"{region}-{area_bin}-{polygon_index}",
+                            "geometry": Polygon(
+                                [
+                                    (lon, 0),
+                                    (lon + 0.1, 0),
+                                    (lon + 0.1, 0.1),
+                                    (lon, 0.1),
+                                    (lon, 0),
+                                ]
+                            ),
+                        }
+                    )
+        gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:4326")
+
+        sample = sample_worldwide_polygons(
+            gdf,
+            sample_size=30,
+            max_per_bbox=1,
+            random_state=7,
+        )
+
+        self.assertEqual(len(sample), 30)
+        self.assertEqual(
+            sample["world_region"].value_counts().to_dict(),
+            {
+                "Africa": 10,
+                "Asia": 10,
+                "Europe": 10,
+            },
+        )
+
     def test_sample_worldwide_polygons_balances_area_bins_when_available(self) -> None:
         rows = []
         for area_bin in ["tiny", "small", "medium", "large"]:

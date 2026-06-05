@@ -406,6 +406,24 @@ def _compute_group_targets(
     if not group_columns:
         return {("__all__",): min(sample_size, len(gdf))}
 
+    if group_columns[0] == "world_region" and len(group_columns) > 1:
+        primary_targets = _compute_group_targets(gdf, sample_size, ["world_region"])
+        targets = {}
+
+        for primary_key, primary_target in primary_targets.items():
+            primary_value = primary_key[0]
+            primary_gdf = gdf[gdf["world_region"] == primary_value]
+            secondary_targets = _compute_group_targets(
+                primary_gdf,
+                primary_target,
+                group_columns[1:],
+            )
+
+            for secondary_key, secondary_target in secondary_targets.items():
+                targets[primary_key + secondary_key] = secondary_target
+
+        return targets
+
     groups = list(gdf.groupby(group_columns, sort=True, dropna=False))
     group_sizes = {
         group_key if isinstance(group_key, tuple) else (group_key,): len(group)
@@ -655,15 +673,24 @@ def _select_balanced_sparse_rows(
 
         return False
 
-    while len(selected_rows) < min(sample_size, len(gdf)):
+    def pick_any_for_group(
+        group_key: tuple,
+        enforce_local_distance: bool,
+        enforce_global_distance: bool,
+    ) -> bool:
+        for index, row in grouped_rows.get(group_key, []):
+            if can_select(index, row, enforce_local_distance, enforce_global_distance):
+                select(index, row)
+                return True
+
+        return False
+
+    def sorted_under_target_group_keys() -> list[tuple]:
         eligible_group_keys = [
             group_key
             for group_key, target in group_targets.items()
             if selected_group_counts.get(group_key, 0) < target
         ]
-        if not eligible_group_keys:
-            break
-
         eligible_group_keys.sort(
             key=lambda group_key: (
                 selected_group_counts.get(group_key, 0) / max(group_targets[group_key], 1),
@@ -671,11 +698,36 @@ def _select_balanced_sparse_rows(
             )
         )
 
+        return eligible_group_keys
+
+    while len(selected_rows) < min(sample_size, len(gdf)):
+        eligible_group_keys = sorted_under_target_group_keys()
+        if not eligible_group_keys:
+            break
+
         made_progress = False
         for group_key in eligible_group_keys:
             if pick_next_for_group(
                 group_key,
                 enforce_local_distance=True,
+                enforce_global_distance=True,
+            ):
+                made_progress = True
+                break
+
+        if not made_progress:
+            break
+
+    while len(selected_rows) < min(sample_size, len(gdf)):
+        eligible_group_keys = sorted_under_target_group_keys()
+        if not eligible_group_keys:
+            break
+
+        made_progress = False
+        for group_key in eligible_group_keys:
+            if pick_any_for_group(
+                group_key,
+                enforce_local_distance=False,
                 enforce_global_distance=True,
             ):
                 made_progress = True

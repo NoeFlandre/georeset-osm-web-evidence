@@ -44,7 +44,7 @@ SAMPLE_SIZE = compute_sample_size(
 MIN_AREA_KM2 = 0.02
 MAX_AREA_KM2 = 100
 MAX_PER_BBOX = 1
-MAX_PER_COUNTRY = 100
+MAX_PER_COUNTRY = 150
 SPARSITY_DISTANCE_KM_STEPS = [100, 80, 60, 40, 25]
 SPATIAL_CELL_SIZE_DEGREES = 0.5
 MAX_EXTRACTS_PER_RUN = int(os.environ.get("WORLDWIDE_OSM_MAX_EXTRACTS_PER_RUN", "12"))
@@ -76,6 +76,95 @@ TOOLTIP_COLUMNS = [
     "area_km2",
     "area_size_bin",
 ]
+
+
+def compute_region_sample_deficits(
+    sample_gdf: gpd.GeoDataFrame,
+    target_sample_size: int,
+) -> dict[str, int]:
+    regions = sorted(set(REGION_BY_GEOFABRIK_ROOT.values()))
+    if not regions:
+        return {}
+
+    base_target = target_sample_size // len(regions)
+    remainder = target_sample_size % len(regions)
+    region_targets = {
+        region: base_target + int(index < remainder)
+        for index, region in enumerate(regions)
+    }
+    region_counts = sample_gdf["world_region"].value_counts().to_dict()
+
+    return {
+        region: max(region_targets[region] - int(region_counts.get(region, 0)), 0)
+        for region in regions
+    }
+
+
+def load_region_sample_deficits(
+    sample_path: str,
+    target_sample_size: int,
+) -> dict[str, int]:
+    if not Path(sample_path).exists():
+        return {}
+
+    sample_gdf = load_geodataframe(sample_path)
+    if "world_region" not in sample_gdf.columns:
+        return {}
+
+    return compute_region_sample_deficits(sample_gdf, target_sample_size)
+
+
+def rank_extract_configs_by_region_deficit(
+    extract_configs: list[dict],
+    region_deficits: dict[str, int],
+) -> list[dict]:
+    indexed_configs = list(enumerate(extract_configs))
+    indexed_configs.sort(
+        key=lambda item: (
+            -region_deficits.get(item[1]["world_region"], 0),
+            item[0],
+        )
+    )
+
+    return [extract_config for _, extract_config in indexed_configs]
+
+
+def region_count_spread(sample_gdf: pd.DataFrame) -> int:
+    if sample_gdf.empty or "world_region" not in sample_gdf.columns:
+        return 0
+
+    known_regions = sorted(set(REGION_BY_GEOFABRIK_ROOT.values()))
+    region_counts = sample_gdf["world_region"].value_counts().to_dict()
+    counts = [int(region_counts.get(region, 0)) for region in known_regions]
+
+    return max(counts) - min(counts)
+
+
+def is_better_worldwide_sample(
+    candidate_sample: pd.DataFrame,
+    candidate_distance_km: int,
+    current_best_sample: pd.DataFrame,
+    current_best_distance_km: int | None,
+    target_sample_size: int,
+) -> bool:
+    candidate_is_full = len(candidate_sample) >= target_sample_size
+    current_best_is_full = len(current_best_sample) >= target_sample_size
+
+    if candidate_is_full != current_best_is_full:
+        return candidate_is_full
+
+    if not candidate_is_full and len(candidate_sample) != len(current_best_sample):
+        return len(candidate_sample) > len(current_best_sample)
+
+    candidate_spread = region_count_spread(candidate_sample)
+    current_best_spread = region_count_spread(current_best_sample)
+    if candidate_spread != current_best_spread:
+        return candidate_spread < current_best_spread
+
+    if current_best_distance_km is None:
+        return True
+
+    return candidate_distance_km > current_best_distance_km
 
 EXTRACT_CONFIGS = [
     {"extract_id": "andorra", "world_region": "Europe", "local_language": "ca"},
@@ -335,6 +424,11 @@ def download_file(url: str, path: Path) -> None:
                     file.write(chunk)
 
 
+def remove_downloaded_extract_if_unkept(pbf_path: Path) -> None:
+    if not KEEP_DOWNLOADED_EXTRACTS:
+        pbf_path.unlink(missing_ok=True)
+
+
 def safe_extract_filename(extract_id: str) -> str:
     return extract_id.replace("/", "__") + "-latest.osm.pbf"
 
@@ -423,6 +517,7 @@ def process_extract(
     multipolygons_gdf = read_pbf_multipolygons(pbf_path)
 
     if multipolygons_gdf.empty:
+        remove_downloaded_extract_if_unkept(pbf_path)
         return None
 
     candidate_gdf = multipolygons_to_candidate_gdf(
@@ -437,6 +532,7 @@ def process_extract(
     )
 
     if candidate_gdf.empty:
+        remove_downloaded_extract_if_unkept(pbf_path)
         return None
 
     candidate_gdf = add_geodesic_area_km2(candidate_gdf)
@@ -447,6 +543,7 @@ def process_extract(
     )
 
     if candidate_gdf.empty:
+        remove_downloaded_extract_if_unkept(pbf_path)
         return None
 
     candidate_gdf = add_area_size_bin(candidate_gdf)
@@ -456,14 +553,14 @@ def process_extract(
     )
     candidate_gdf = filter_named_environmental_polygons(candidate_gdf)
 
-    if not KEEP_DOWNLOADED_EXTRACTS:
-        pbf_path.unlink(missing_ok=True)
+    remove_downloaded_extract_if_unkept(pbf_path)
 
     return candidate_gdf
 
 
 def sample_with_relaxed_sparsity(candidates_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    latest_sample = candidates_gdf.head(0).copy()
+    best_sample = candidates_gdf.head(0).copy()
+    best_distance_km = None
 
     for min_distance_km in SPARSITY_DISTANCE_KM_STEPS:
         sample_gdf = sample_worldwide_polygons(
@@ -480,11 +577,24 @@ def sample_with_relaxed_sparsity(candidates_gdf: gpd.GeoDataFrame) -> gpd.GeoDat
             f"Sparsity pass with {min_distance_km} km minimum centroid distance "
             f"kept {len(sample_gdf)} polygons"
         )
+        print(
+            "Region count spread for this pass: "
+            f"{region_count_spread(sample_gdf)}"
+        )
 
-        if len(sample_gdf) >= SAMPLE_SIZE:
-            return sample_gdf
+        if is_better_worldwide_sample(
+            candidate_sample=sample_gdf,
+            candidate_distance_km=min_distance_km,
+            current_best_sample=best_sample,
+            current_best_distance_km=best_distance_km,
+            target_sample_size=SAMPLE_SIZE,
+        ):
+            best_sample = sample_gdf
+            best_distance_km = min_distance_km
 
-    return latest_sample
+    print(f"Selected sparsity pass: {best_distance_km} km minimum centroid distance")
+
+    return best_sample
 
 
 def render_sample_map(sample_gdf: gpd.GeoDataFrame) -> None:
@@ -572,6 +682,14 @@ def main() -> None:
             configured_extract_ids,
         )
     all_extract_configs = EXTRACT_CONFIGS + discovered_configs
+    region_deficits = load_region_sample_deficits(SAMPLE_OUTPUT_PATH, SAMPLE_SIZE)
+    if region_deficits:
+        print("Current sample deficit by world region:")
+        print(pd.Series(region_deficits).sort_values(ascending=False))
+        all_extract_configs = rank_extract_configs_by_region_deficit(
+            all_extract_configs,
+            region_deficits,
+        )
     candidate_gdfs = []
 
     existing_extract_gdf = load_existing_geodataframe(EXTRACT_CANDIDATES_PATH)
