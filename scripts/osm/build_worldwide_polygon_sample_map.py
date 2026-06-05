@@ -39,13 +39,13 @@ MAP_OUTPUT_PATH = "data/processed/maps/worldwide_training_polygon_sample.html"
 
 TARGET_TRAINING_SENTENCES = 50_000
 PLANNED_SENTENCES_PER_POLYGON = 10
-MIN_AREA_KM2 = 0.2
-MAX_AREA_KM2 = 5_000
+MIN_AREA_KM2 = 0.02
+MAX_AREA_KM2 = 100
 SAMPLE_SIZE = compute_sample_size(
     TARGET_TRAINING_SENTENCES,
     PLANNED_SENTENCES_PER_POLYGON,
 )
-MAX_PER_BBOX = 4
+MAX_PER_BBOX = 1
 MAX_PER_COUNTRY = 100
 REQUEST_PAUSE_SECONDS = float(
     os.environ.get("WORLDWIDE_OSM_REQUEST_PAUSE_SECONDS", "1.5")
@@ -108,8 +108,14 @@ def fetch_bbox_candidates(bbox_config: dict) -> gpd.GeoDataFrame | None:
 
 
 def combine_candidate_gdfs(gdfs: list[gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
+    prepared_gdfs = [prepare_candidate_pool(gdf) for gdf in gdfs if not gdf.empty]
+    prepared_gdfs = [gdf for gdf in prepared_gdfs if not gdf.empty]
+
+    if not prepared_gdfs:
+        return gpd.GeoDataFrame(geometry="geometry", crs="EPSG:4326")
+
     combined = gpd.GeoDataFrame(
-        pd.concat(gdfs, ignore_index=True),
+        pd.concat(prepared_gdfs, ignore_index=True),
         geometry="geometry",
         crs="EPSG:4326",
     )
@@ -121,21 +127,39 @@ def combine_candidate_gdfs(gdfs: list[gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
 
 def save_candidate_gdfs(gdfs: list[gpd.GeoDataFrame], path: str) -> gpd.GeoDataFrame:
     candidates_gdf = combine_candidate_gdfs(gdfs)
-    candidates_gdf = filter_named_environmental_polygons(candidates_gdf)
     save_geodataframe(candidates_gdf, path)
 
     return candidates_gdf
+
+
+def prepare_candidate_pool(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    gdf = gdf.copy()
+    if gdf.empty:
+        return gdf
+
+    if "area_km2" not in gdf.columns:
+        gdf = add_geodesic_area_km2(gdf)
+
+    gdf = filter_by_area(
+        gdf,
+        min_area_km2=MIN_AREA_KM2,
+        max_area_km2=MAX_AREA_KM2,
+    )
+
+    if gdf.empty:
+        return gdf
+
+    gdf = add_area_size_bin(gdf)
+    gdf = filter_named_environmental_polygons(gdf)
+
+    return gdf.reset_index(drop=True)
 
 
 def load_existing_candidates(path: str) -> gpd.GeoDataFrame | None:
     if not Path(path).exists():
         return None
 
-    gdf = load_geodataframe(path)
-    if gdf.empty:
-        return None
-
-    gdf = filter_named_environmental_polygons(gdf)
+    gdf = prepare_candidate_pool(load_geodataframe(path))
     if gdf.empty:
         return None
 

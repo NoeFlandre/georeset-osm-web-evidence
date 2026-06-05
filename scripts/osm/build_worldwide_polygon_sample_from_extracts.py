@@ -41,18 +41,18 @@ SAMPLE_SIZE = compute_sample_size(
     TARGET_TRAINING_SENTENCES,
     PLANNED_SENTENCES_PER_POLYGON,
 )
-MIN_AREA_KM2 = 0.2
-MAX_AREA_KM2 = 5_000
-MAX_PER_BBOX = 4
+MIN_AREA_KM2 = 0.02
+MAX_AREA_KM2 = 100
+MAX_PER_BBOX = 1
 MAX_PER_COUNTRY = 100
 SPARSITY_DISTANCE_KM_STEPS = [100, 80, 60, 40, 25]
-SPATIAL_CELL_SIZE_DEGREES = 1.0
+SPATIAL_CELL_SIZE_DEGREES = 0.5
 MAX_EXTRACTS_PER_RUN = int(os.environ.get("WORLDWIDE_OSM_MAX_EXTRACTS_PER_RUN", "12"))
 MAX_DISCOVERED_EXTRACTS = int(
     os.environ.get("WORLDWIDE_OSM_MAX_DISCOVERED_EXTRACTS", "240")
 )
 MAX_EXTRACT_DOWNLOAD_BYTES = int(
-    os.environ.get("WORLDWIDE_OSM_MAX_EXTRACT_DOWNLOAD_BYTES", "150000000")
+    os.environ.get("WORLDWIDE_OSM_MAX_EXTRACT_DOWNLOAD_BYTES", "300000000")
 )
 KEEP_DOWNLOADED_EXTRACTS = (
     os.environ.get("WORLDWIDE_OSM_KEEP_DOWNLOADED_EXTRACTS", "0") == "1"
@@ -151,6 +151,19 @@ EXTRACT_CONFIGS = [
     {"extract_id": "solomon-islands", "world_region": "Oceania", "local_language": "en"},
     {"extract_id": "vanuatu", "world_region": "Oceania", "local_language": "bi"},
     {"extract_id": "samoa", "world_region": "Oceania", "local_language": "sm"},
+    {"extract_id": "venezuela", "world_region": "South America", "local_language": "es"},
+    {"extract_id": "norte", "world_region": "South America", "local_language": "pt"},
+    {"extract_id": "centro-oeste", "world_region": "South America", "local_language": "pt"},
+    {"extract_id": "western-australia", "world_region": "Oceania", "local_language": "en"},
+    {"extract_id": "queensland", "world_region": "Oceania", "local_language": "en"},
+    {"extract_id": "victoria", "world_region": "Oceania", "local_language": "en"},
+    {"extract_id": "new-south-wales", "world_region": "Oceania", "local_language": "en"},
+    {"extract_id": "egypt", "world_region": "Africa", "local_language": "ar"},
+    {"extract_id": "mali", "world_region": "Africa", "local_language": "fr"},
+    {"extract_id": "somalia", "world_region": "Africa", "local_language": "so"},
+    {"extract_id": "sudan", "world_region": "Africa", "local_language": "ar"},
+    {"extract_id": "mozambique", "world_region": "Africa", "local_language": "pt"},
+    {"extract_id": "algeria", "world_region": "Africa", "local_language": "ar"},
 ]
 
 REGION_BY_GEOFABRIK_ROOT = {
@@ -330,14 +343,52 @@ def load_existing_geodataframe(path: str) -> gpd.GeoDataFrame | None:
     if not Path(path).exists():
         return None
 
-    gdf = load_geodataframe(path)
+    gdf = prepare_candidate_pool(load_geodataframe(path))
 
     return None if gdf.empty else gdf
 
 
+def prepare_candidate_pool(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    gdf = gdf.copy()
+    if gdf.empty:
+        return gdf
+
+    if "area_km2" not in gdf.columns:
+        gdf = add_geodesic_area_km2(gdf)
+
+    gdf = filter_by_area(
+        gdf,
+        min_area_km2=MIN_AREA_KM2,
+        max_area_km2=MAX_AREA_KM2,
+    )
+
+    if gdf.empty:
+        return gdf
+
+    gdf = add_area_size_bin(gdf)
+    if "source_extract_id" in gdf.columns:
+        gdf = add_extract_spatial_cells(
+            gdf,
+            cell_size_degrees=SPATIAL_CELL_SIZE_DEGREES,
+        )
+    gdf = filter_named_environmental_polygons(gdf)
+
+    return gdf.reset_index(drop=True)
+
+
 def combine_candidate_gdfs(gdfs: list[gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
+    prepared_gdfs = [
+        prepare_candidate_pool(gdf)
+        for gdf in gdfs
+        if gdf is not None and not gdf.empty
+    ]
+    prepared_gdfs = [gdf for gdf in prepared_gdfs if not gdf.empty]
+
+    if not prepared_gdfs:
+        return gpd.GeoDataFrame(geometry="geometry", crs="EPSG:4326")
+
     combined = gpd.GeoDataFrame(
-        pd.concat(gdfs, ignore_index=True),
+        pd.concat(prepared_gdfs, ignore_index=True),
         geometry="geometry",
         crs="EPSG:4326",
     )
@@ -468,18 +519,59 @@ def should_update_sample_checkpoint(
     return processed_extract_index % checkpoint_interval == 0
 
 
+def resample_existing_candidates() -> None:
+    existing_extract_gdf = load_existing_geodataframe(EXTRACT_CANDIDATES_PATH)
+    if existing_extract_gdf is None:
+        raise RuntimeError(
+            "No cached extract candidates found; run with "
+            "WORLDWIDE_OSM_MAX_EXTRACTS_PER_RUN > 0 first."
+        )
+
+    combined_inputs = [existing_extract_gdf]
+    overpass_gdf = load_existing_geodataframe(OVERPASS_CANDIDATES_PATH)
+    if overpass_gdf is not None:
+        combined_inputs.append(overpass_gdf)
+
+    extract_candidates_gdf = combine_candidate_gdfs([existing_extract_gdf])
+    save_geodataframe(extract_candidates_gdf, EXTRACT_CANDIDATES_PATH)
+    combined_candidates_gdf = combine_candidate_gdfs(combined_inputs)
+    save_geodataframe(combined_candidates_gdf, COMBINED_CANDIDATES_PATH)
+    print(f"Prepared {len(combined_candidates_gdf)} cached candidate polygons")
+
+    sample_gdf = save_sample_checkpoint(combined_candidates_gdf)
+    render_sample_map(sample_gdf)
+
+    if len(sample_gdf) < SAMPLE_SIZE:
+        print(
+            f"Sample is {SAMPLE_SIZE - len(sample_gdf)} polygons below the "
+            f"{SAMPLE_SIZE} polygon target; rerun this script to process more extracts."
+        )
+
+
 def main() -> None:
+    if MAX_EXTRACTS_PER_RUN == 0:
+        resample_existing_candidates()
+        return
+
     geofabrik_lookup = load_geofabrik_lookup(INDEX_PATH)
     configured_extract_ids = {
         extract_config["extract_id"]
         for extract_config in EXTRACT_CONFIGS
     }
-    discovered_configs = build_discovered_extract_configs(
-        geofabrik_lookup,
-        configured_extract_ids,
-    )
-    all_extract_configs = EXTRACT_CONFIGS + discovered_configs
     attempted_extract_ids = load_attempted_ids(ATTEMPTED_EXTRACT_IDS_PATH)
+    configured_pending_configs = [
+        extract_config
+        for extract_config in EXTRACT_CONFIGS
+        if extract_config["extract_id"] not in attempted_extract_ids
+    ]
+    if len(configured_pending_configs) >= MAX_EXTRACTS_PER_RUN:
+        discovered_configs = []
+    else:
+        discovered_configs = build_discovered_extract_configs(
+            geofabrik_lookup,
+            configured_extract_ids,
+        )
+    all_extract_configs = EXTRACT_CONFIGS + discovered_configs
     candidate_gdfs = []
 
     existing_extract_gdf = load_existing_geodataframe(EXTRACT_CANDIDATES_PATH)

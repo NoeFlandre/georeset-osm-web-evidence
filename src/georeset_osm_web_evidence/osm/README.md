@@ -8,4 +8,4 @@ Utilities for building the polygon candidate set from OpenStreetMap.
 - `geometry.py` converts OSM elements into polygon records and keeps named records.
 - `geodataframe.py` builds GeoDataFrames, computes France-specific projected areas or worldwide geodesic areas, filters by area, and adds centroids.
 - `sampling.py` contains simple polygon sampling helpers.
-- `worldwide.py` defines worldwide training bounding boxes, validates named environmental polygons, adds bbox metadata, creates area-size bins, computes training sample sizes, and samples polygons with sparse-first per-bbox, per-country, world-region, and area-size balancing.
+- `worldwide.py` defines worldwide training bounding boxes, validates named environmental polygons, adds bbox metadata, creates log-scale area-size bins (`tiny`, `small`, `medium`, `large`), computes training sample sizes, and samples polygons with global sparsity plus per-cell, per-country, world-region, and area-size balancing.

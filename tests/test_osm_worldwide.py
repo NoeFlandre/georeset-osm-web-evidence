@@ -41,13 +41,14 @@ class OsmWorldwideTests(unittest.TestCase):
         self.assertGreater(result.loc[0, "area_km2"], 12_000)
         self.assertLess(result.loc[0, "area_km2"], 13_000)
 
-    def test_area_size_bin_labels_small_medium_and_large_polygons(self) -> None:
+    def test_area_size_bin_uses_log_scale_labels(self) -> None:
         gdf = gpd.GeoDataFrame(
             [
+                {"area_km2": 0.05},
+                {"area_km2": 0.5},
                 {"area_km2": 2},
                 {"area_km2": 20},
-                {"area_km2": 200},
-                {"area_km2": 1_200},
+                {"area_km2": 80},
             ]
         )
 
@@ -55,7 +56,7 @@ class OsmWorldwideTests(unittest.TestCase):
 
         self.assertEqual(
             result["area_size_bin"].to_list(),
-            ["small", "medium", "large", "very_large"],
+            ["tiny", "small", "medium", "large", "large"],
         )
 
     def test_compute_sample_size_uses_planned_sentences_per_polygon(self) -> None:
@@ -221,7 +222,7 @@ class OsmWorldwideTests(unittest.TestCase):
 
     def test_sample_worldwide_polygons_balances_area_bins_when_available(self) -> None:
         rows = []
-        for area_bin in ["small", "medium", "large"]:
+        for area_bin in ["tiny", "small", "medium", "large"]:
             for polygon_index in range(5):
                 rows.append(
                     {
@@ -245,17 +246,62 @@ class OsmWorldwideTests(unittest.TestCase):
 
         sample = sample_worldwide_polygons(
             gdf,
-            sample_size=6,
+            sample_size=8,
             max_per_bbox=5,
             random_state=7,
         )
 
-        self.assertEqual(len(sample), 6)
+        self.assertEqual(len(sample), 8)
         self.assertEqual(sample["area_size_bin"].value_counts().to_dict(), {
             "large": 2,
             "medium": 2,
             "small": 2,
+            "tiny": 2,
         })
+
+    def test_sample_worldwide_polygons_balances_even_when_cell_cap_hits_target(self) -> None:
+        rows = []
+        for bbox_index in range(12):
+            lon = bbox_index * 2
+            for region, area_bin in [
+                ("Europe", "large"),
+                ("Africa", "tiny"),
+            ]:
+                rows.append(
+                    {
+                        "bbox_id": f"bbox-{bbox_index}",
+                        "world_region": region,
+                        "area_size_bin": area_bin,
+                        "osm_type": "way",
+                        "osm_id": f"{bbox_index}-{region}-{area_bin}",
+                        "geometry": Polygon(
+                            [
+                                (lon, 0),
+                                (lon + 0.1, 0),
+                                (lon + 0.1, 0.1),
+                                (lon, 0.1),
+                                (lon, 0),
+                            ]
+                        ),
+                    }
+                )
+        gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:4326")
+
+        sample = sample_worldwide_polygons(
+            gdf,
+            sample_size=12,
+            max_per_bbox=1,
+            random_state=7,
+        )
+
+        self.assertEqual(len(sample), 12)
+        self.assertEqual(
+            sample[["world_region", "area_size_bin"]].value_counts().to_dict(),
+            {
+                ("Africa", "tiny"): 6,
+                ("Europe", "large"): 6,
+            },
+        )
 
     def test_filter_named_environmental_polygons_keeps_only_named_matching_tags(self) -> None:
         gdf = gpd.GeoDataFrame(

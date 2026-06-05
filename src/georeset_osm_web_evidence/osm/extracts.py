@@ -110,12 +110,8 @@ def add_extract_spatial_cells(
     lat_cells = representative_points.apply(lambda point: math.floor(point.y / cell_size_degrees))
 
     gdf["bbox_id"] = [
-        f"extract:{source_extract_id}:cell:lat{lat_cell}_lon{lon_cell}"
-        for source_extract_id, lat_cell, lon_cell in zip(
-            gdf["source_extract_id"],
-            lat_cells,
-            lon_cells,
-        )
+        f"cell:lat{lat_cell}_lon{lon_cell}"
+        for lat_cell, lon_cell in zip(lat_cells, lon_cells)
     ]
 
     return gdf

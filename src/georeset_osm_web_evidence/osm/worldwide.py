@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 import geopandas as gpd
 
@@ -300,8 +302,9 @@ def add_area_size_bin(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     gdf = gdf.copy()
     gdf["area_size_bin"] = pd.cut(
         gdf["area_km2"],
-        bins=[0, 5, 50, 500, float("inf")],
-        labels=["small", "medium", "large", "very_large"],
+        bins=[0, 0.1, 1, 10, float("inf")],
+        labels=["tiny", "small", "medium", "large"],
+        right=False,
         include_lowest=True,
     ).astype(str)
 
@@ -378,6 +381,330 @@ def _cap_group_size(
         geometry=gdf.geometry.name,
         crs=gdf.crs,
     )
+
+
+def _group_columns_for_balancing(gdf: gpd.GeoDataFrame) -> list[str]:
+    return [
+        column
+        for column in ["world_region", "area_size_bin"]
+        if column in gdf.columns
+    ]
+
+
+def _group_key(row: pd.Series, group_columns: list[str]) -> tuple:
+    if not group_columns:
+        return ("__all__",)
+
+    return tuple(row[column] for column in group_columns)
+
+
+def _compute_group_targets(
+    gdf: gpd.GeoDataFrame,
+    sample_size: int,
+    group_columns: list[str],
+) -> dict[tuple, int]:
+    if not group_columns:
+        return {("__all__",): min(sample_size, len(gdf))}
+
+    groups = list(gdf.groupby(group_columns, sort=True, dropna=False))
+    group_sizes = {
+        group_key if isinstance(group_key, tuple) else (group_key,): len(group)
+        for group_key, group in groups
+    }
+    targets = dict.fromkeys(group_sizes, 0)
+
+    while sum(targets.values()) < min(sample_size, len(gdf)):
+        grew = False
+        for group_key in sorted(group_sizes):
+            if sum(targets.values()) >= min(sample_size, len(gdf)):
+                break
+
+            if targets[group_key] >= group_sizes[group_key]:
+                continue
+
+            targets[group_key] += 1
+            grew = True
+
+        if not grew:
+            break
+
+    return targets
+
+
+def _is_far_enough_from_points(
+    lon: float,
+    lat: float,
+    points: list[tuple[float, float]],
+    min_distance_km: float,
+) -> bool:
+    return all(
+        _geodesic_distance_km(lon, lat, selected_lon, selected_lat)
+        >= min_distance_km
+        for selected_lon, selected_lat in points
+    )
+
+
+def _distance_cell_size_degrees(min_distance_km: float) -> float:
+    if min_distance_km <= 0:
+        return 1.0
+
+    return max(min_distance_km / 111, 0.25)
+
+
+def _distance_cell_key(
+    lon: float,
+    lat: float,
+    cell_size_degrees: float,
+) -> tuple[int, int]:
+    return (
+        math.floor(lat / cell_size_degrees),
+        math.floor(lon / cell_size_degrees),
+    )
+
+
+def _nearby_distance_cells(
+    lon: float,
+    lat: float,
+    cell_size_degrees: float,
+    min_distance_km: float,
+) -> list[tuple[int, int]]:
+    lat_cell, lon_cell = _distance_cell_key(lon, lat, cell_size_degrees)
+    lat_radius_degrees = min_distance_km / 110.574
+    lon_scale = max(111.320 * math.cos(math.radians(lat)), 1)
+    lon_radius_degrees = min_distance_km / lon_scale
+    lat_steps = math.ceil(lat_radius_degrees / cell_size_degrees)
+    lon_steps = math.ceil(lon_radius_degrees / cell_size_degrees)
+
+    return [
+        (nearby_lat_cell, nearby_lon_cell)
+        for nearby_lat_cell in range(lat_cell - lat_steps, lat_cell + lat_steps + 1)
+        for nearby_lon_cell in range(lon_cell - lon_steps, lon_cell + lon_steps + 1)
+    ]
+
+
+def _add_point_to_distance_grid(
+    grid: dict[tuple[int, int], list[tuple[float, float]]],
+    lon: float,
+    lat: float,
+    cell_size_degrees: float,
+) -> None:
+    grid.setdefault(
+        _distance_cell_key(lon, lat, cell_size_degrees),
+        [],
+    ).append((lon, lat))
+
+
+def _is_far_enough_from_distance_grid(
+    lon: float,
+    lat: float,
+    grid: dict[tuple[int, int], list[tuple[float, float]]],
+    cell_size_degrees: float,
+    min_distance_km: float,
+) -> bool:
+    for cell_key in _nearby_distance_cells(
+        lon,
+        lat,
+        cell_size_degrees,
+        min_distance_km,
+    ):
+        if not _is_far_enough_from_points(
+            lon,
+            lat,
+            grid.get(cell_key, []),
+            min_distance_km,
+        ):
+            return False
+
+    return True
+
+
+def _select_balanced_sparse_rows(
+    gdf: gpd.GeoDataFrame,
+    sample_size: int,
+    max_per_bbox: int | None,
+    max_per_country: int | None,
+    min_centroid_distance_km: float,
+    min_global_centroid_distance_km: float,
+    random_state: int | None,
+) -> gpd.GeoDataFrame:
+    gdf = _add_representative_coordinates(gdf)
+    group_columns = _group_columns_for_balancing(gdf)
+    group_targets = _compute_group_targets(gdf, sample_size, group_columns)
+
+    grouped_rows = {}
+    for group_index, (group_key, group) in enumerate(
+        gdf.groupby(group_columns, sort=True, dropna=False)
+        if group_columns
+        else [(("__all__",), gdf)]
+    ):
+        normalized_key = group_key if isinstance(group_key, tuple) else (group_key,)
+        seed = None if random_state is None else random_state + group_index
+        grouped_rows[normalized_key] = list(group.sample(frac=1, random_state=seed).iterrows())
+
+    grouped_positions = dict.fromkeys(grouped_rows, 0)
+    selected_rows = []
+    selected_indices = set()
+    selected_group_counts = dict.fromkeys(group_targets, 0)
+    selected_bbox_counts = {}
+    selected_country_counts = {}
+    selected_bbox_grids = {}
+    selected_global_grid = {}
+    local_cell_size_degrees = _distance_cell_size_degrees(min_centroid_distance_km)
+    global_cell_size_degrees = _distance_cell_size_degrees(
+        min_global_centroid_distance_km
+    )
+
+    def can_select(
+        index,
+        row,
+        enforce_local_distance: bool,
+        enforce_global_distance: bool,
+    ) -> bool:
+        if index in selected_indices:
+            return False
+
+        bbox_id = row.get("bbox_id")
+        if (
+            max_per_bbox is not None
+            and bbox_id is not None
+            and selected_bbox_counts.get(bbox_id, 0) >= max_per_bbox
+        ):
+            return False
+
+        country = row.get("country")
+        if (
+            max_per_country is not None
+            and country is not None
+            and selected_country_counts.get(country, 0) >= max_per_country
+        ):
+            return False
+
+        lon = row["centroid_lon"]
+        lat = row["centroid_lat"]
+        if (
+            enforce_local_distance
+            and min_centroid_distance_km > 0
+            and bbox_id is not None
+            and not _is_far_enough_from_distance_grid(
+                lon,
+                lat,
+                selected_bbox_grids.get(bbox_id, {}),
+                local_cell_size_degrees,
+                min_centroid_distance_km,
+            )
+        ):
+            return False
+
+        if (
+            enforce_global_distance
+            and min_global_centroid_distance_km > 0
+            and not _is_far_enough_from_distance_grid(
+                lon,
+                lat,
+                selected_global_grid,
+                global_cell_size_degrees,
+                min_global_centroid_distance_km,
+            )
+        ):
+            return False
+
+        return True
+
+    def select(index, row) -> None:
+        selected_rows.append(row)
+        selected_indices.add(index)
+        group_key = _group_key(row, group_columns)
+        selected_group_counts[group_key] = selected_group_counts.get(group_key, 0) + 1
+
+        bbox_id = row.get("bbox_id")
+        if bbox_id is not None:
+            selected_bbox_counts[bbox_id] = selected_bbox_counts.get(bbox_id, 0) + 1
+            selected_bbox_grids.setdefault(bbox_id, {})
+            _add_point_to_distance_grid(
+                selected_bbox_grids[bbox_id],
+                row["centroid_lon"],
+                row["centroid_lat"],
+                local_cell_size_degrees,
+            )
+
+        country = row.get("country")
+        if country is not None:
+            selected_country_counts[country] = selected_country_counts.get(country, 0) + 1
+
+        _add_point_to_distance_grid(
+            selected_global_grid,
+            row["centroid_lon"],
+            row["centroid_lat"],
+            global_cell_size_degrees,
+        )
+
+    def pick_next_for_group(
+        group_key: tuple,
+        enforce_local_distance: bool,
+        enforce_global_distance: bool,
+    ) -> bool:
+        rows = grouped_rows.get(group_key, [])
+        position = grouped_positions.get(group_key, 0)
+        while position < len(rows):
+            index, row = rows[position]
+            grouped_positions[group_key] = position + 1
+            position += 1
+            if can_select(index, row, enforce_local_distance, enforce_global_distance):
+                select(index, row)
+                return True
+
+        return False
+
+    while len(selected_rows) < min(sample_size, len(gdf)):
+        eligible_group_keys = [
+            group_key
+            for group_key, target in group_targets.items()
+            if selected_group_counts.get(group_key, 0) < target
+        ]
+        if not eligible_group_keys:
+            break
+
+        eligible_group_keys.sort(
+            key=lambda group_key: (
+                selected_group_counts.get(group_key, 0) / max(group_targets[group_key], 1),
+                group_key,
+            )
+        )
+
+        made_progress = False
+        for group_key in eligible_group_keys:
+            if pick_next_for_group(
+                group_key,
+                enforce_local_distance=True,
+                enforce_global_distance=True,
+            ):
+                made_progress = True
+                break
+
+        if not made_progress:
+            break
+
+    if len(selected_rows) < min(sample_size, len(gdf)):
+        shuffled = gdf.sample(frac=1, random_state=random_state)
+        for index, row in shuffled.iterrows():
+            if len(selected_rows) >= min(sample_size, len(gdf)):
+                break
+
+            if can_select(
+                index,
+                row,
+                enforce_local_distance=False,
+                enforce_global_distance=True,
+            ):
+                select(index, row)
+
+    selected = (
+        gpd.GeoDataFrame(selected_rows, geometry=gdf.geometry.name, crs=gdf.crs)
+        if selected_rows
+        else gdf.head(0).copy()
+    )
+
+    return selected
 
 
 def _add_representative_coordinates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -475,55 +802,15 @@ def sample_worldwide_polygons(
     if gdf.empty:
         return gdf.copy()
 
-    bbox_samples = []
-    for bbox_index, (_, bbox_gdf) in enumerate(gdf.groupby("bbox_id", sort=True)):
-        seed = random_state + bbox_index
-        bbox_sample = _spatially_thin(
-            bbox_gdf,
-            target_size=max_per_bbox,
-            min_centroid_distance_km=min_centroid_distance_km,
-            random_state=seed,
-        )
-        if not bbox_sample.empty:
-            bbox_samples.append(bbox_sample)
-
-    if not bbox_samples:
-        return gdf.head(0).copy()
-
-    sample = gpd.GeoDataFrame(
-        pd.concat(bbox_samples, ignore_index=True),
-        geometry=gdf.geometry.name,
-        crs=gdf.crs,
-    )
-
-    sample = _cap_group_size(
-        sample,
-        group_column="country",
-        max_per_group=max_per_country,
+    sample = _select_balanced_sparse_rows(
+        gdf,
+        sample_size=sample_size,
+        max_per_bbox=max_per_bbox,
+        max_per_country=max_per_country,
+        min_centroid_distance_km=min_centroid_distance_km,
+        min_global_centroid_distance_km=min_global_centroid_distance_km,
         random_state=random_state,
     )
-
-    if min_global_centroid_distance_km > 0:
-        sample = _spatially_thin(
-            sample,
-            target_size=len(sample),
-            min_centroid_distance_km=min_global_centroid_distance_km,
-            random_state=random_state,
-            fill_shortfall=False,
-        )
-
-    if len(sample) > sample_size:
-        group_columns = [
-            column
-            for column in ["world_region", "area_size_bin"]
-            if column in sample.columns
-        ]
-        sample = _balanced_downsample(
-            sample,
-            sample_size=sample_size,
-            group_columns=group_columns,
-            random_state=random_state,
-        )
 
     if "_spatial_priority" in sample.columns:
         sample = sample.drop(columns=["_spatial_priority"])

@@ -61,7 +61,7 @@ class OsmExtractTests(unittest.TestCase):
         self.assertEqual(result["osm_tags"].iloc[0]["name"], "Named forest")
         self.assertEqual(result["source_extract_id"].to_list(), ["test-extract", "test-extract"])
 
-    def test_add_extract_spatial_cells_assigns_grid_bbox_ids(self) -> None:
+    def test_add_extract_spatial_cells_assigns_global_grid_bbox_ids(self) -> None:
         gdf = gpd.GeoDataFrame(
             [
                 {
@@ -82,8 +82,8 @@ class OsmExtractTests(unittest.TestCase):
         self.assertEqual(
             result["bbox_id"].to_list(),
             [
-                "extract:test-extract:cell:lat0_lon0",
-                "extract:test-extract:cell:lat0_lon1",
+                "cell:lat0_lon0",
+                "cell:lat0_lon1",
             ],
         )
 

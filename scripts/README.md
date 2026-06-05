@@ -6,7 +6,8 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 ## OSM
 
 - `osm/fetch_osm_polygons.py` fetches named environmental OSM polygons from configured France bounding boxes, filters them by area, adds centroids, deduplicates them, and writes `data/raw/osm/named_polygon_candidates.parquet`.
-- `osm/build_worldwide_polygon_sample_map.py` fetches named environmental OSM polygons from configured worldwide training bounding boxes, computes geodesic area, samples toward 5,000 sparse training polygons with per-bbox, per-country, world-region, and area-size controls, and writes both parquet artifacts and a Folium map. It also writes `data/raw/osm/worldwide_attempted_bbox_ids.txt` so empty or failed expansion bboxes are not retried endlessly.
+- `osm/build_worldwide_polygon_sample_map.py` fetches named environmental OSM polygons from configured worldwide training bounding boxes, computes geodesic area, samples toward 5,000 sparse training polygons with one polygon per half-degree cell, per-country, world-region, and log area-size controls (`tiny`, `small`, `medium`, `large`), and writes both parquet artifacts and a Folium map. It also writes `data/raw/osm/worldwide_attempted_bbox_ids.txt` so empty or failed expansion bboxes are not retried endlessly.
+- `osm/build_worldwide_polygon_sample_from_extracts.py` builds the same worldwide training sample from Geofabrik OSM extracts. It reuses cached candidates, keeps named polygons with environmental tags, filters to `0.02-100 km2`, balances across geography and area bins, and writes the worldwide parquet sample plus map.
 - `osm/sample_balanced_wikipedia_polygons.py` samples a 50/50 balanced dataset of polygons with and without Wikipedia articles.
 - `osm/visualize_osm_samples.py` builds a Folium HTML map for the balanced sample and colors polygons by Wikipedia coverage.
 
