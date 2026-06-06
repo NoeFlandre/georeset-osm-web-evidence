@@ -153,7 +153,7 @@ class SearchCoverageTests(unittest.TestCase):
         self.assertTrue(result.empty)
         self.assertEqual(result.columns.to_list(), ["osm_type", "osm_id", "query"])
 
-    def test_load_existing_search_attempts_ignores_legacy_file_without_query_column(self):
+    def test_load_existing_search_attempts_rejects_file_without_query_column(self):
         with TemporaryDirectory() as temporary_directory:
             attempts_path = Path(temporary_directory) / "attempts.parquet"
             pd.DataFrame([{"osm_type": "way", "osm_id": 1}]).to_parquet(
@@ -161,11 +161,8 @@ class SearchCoverageTests(unittest.TestCase):
                 index=False,
             )
 
-            result = load_existing_search_attempts(attempts_path)
-
-        self.assertTrue(result.empty)
-        self.assertIn("query", result.columns)
-        self.assertIn("attempted_at", result.columns)
+            with self.assertRaisesRegex(ValueError, "query"):
+                load_existing_search_attempts(attempts_path)
 
     def test_empty_expected_query_table_keeps_mergeable_schema(self):
         polygons = pd.DataFrame(

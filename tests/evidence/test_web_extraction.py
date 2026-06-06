@@ -20,15 +20,16 @@ class WebExtractionTests(unittest.TestCase):
         """
 
         result = extract_best_text(html, url="https://example.test/forest")
+
         self.assertIn("protected forest", result.text)
         self.assertIsNone(result.error)
-        self.assertIn(result.method, {"trafilatura", "html_parser"})
+        self.assertEqual(result.method, "trafilatura")
 
-    def test_falls_back_to_html_parser_when_trafilatura_returns_none(self):
+    def test_returns_no_text_when_trafilatura_extracts_nothing(self):
         html = """
         <html>
             <body>
-                <p>Fallback text about wetlands and forest trails.</p>
+                <p>Short text about wetlands and forest trails.</p>
             </body>
         </html>
         """
@@ -39,9 +40,20 @@ class WebExtractionTests(unittest.TestCase):
         ):
             result = extract_best_text(html)
 
-        self.assertIn("Fallback text", result.text)
-        self.assertEqual(result.method, "html_parser")
-        self.assertIsNone(result.error)
+        self.assertIsNone(result.text)
+        self.assertIsNone(result.method)
+        self.assertEqual(result.error, "No readable text extracted")
+
+    def test_reports_trafilatura_error_without_alternate_extractor(self):
+        with patch(
+            "georeset_osm_web_evidence.web.extraction.extract_with_trafilatura",
+            side_effect=RuntimeError("parser failed"),
+        ):
+            result = extract_best_text("<html><body>text</body></html>")
+
+        self.assertIsNone(result.text)
+        self.assertIsNone(result.method)
+        self.assertEqual(result.error, "parser failed")
 
 
 if __name__ == "__main__":

@@ -7,33 +7,39 @@ from georeset_osm_web_evidence.search.queries import build_search_queries, get_o
 
 POLYGON_KEY = ["osm_type", "osm_id"]
 QUERY_KEY = POLYGON_KEY + ["query"]
+SEARCH_ATTEMPT_COLUMNS = QUERY_KEY + [
+    "polygon_name",
+    "has_wikipedia_articles",
+    "attempted_at",
+    "result_count",
+]
+
+
+def _require_columns(df: pd.DataFrame, columns: list[str], path: Path) -> None:
+    missing_columns = [column for column in columns if column not in df.columns]
+
+    if missing_columns:
+        missing_text = ", ".join(missing_columns)
+        raise ValueError(f"{path} is missing required columns: {missing_text}")
 
 
 def load_existing_search_results(path: str | Path) -> pd.DataFrame:
     path = Path(path)
 
     if not path.exists():
-        return pd.DataFrame(columns=POLYGON_KEY + ["query"])
+        return pd.DataFrame(columns=QUERY_KEY)
 
     return pd.read_parquet(path)
 
 
 def load_existing_search_attempts(path: str | Path) -> pd.DataFrame:
     path = Path(path)
-    columns = QUERY_KEY + [
-        "polygon_name",
-        "has_wikipedia_articles",
-        "attempted_at",
-        "result_count",
-    ]
 
     if not path.exists():
-        return pd.DataFrame(columns=columns)
+        return pd.DataFrame(columns=SEARCH_ATTEMPT_COLUMNS)
 
     attempts_df = pd.read_parquet(path)
-
-    if "query" not in attempts_df.columns:
-        return pd.DataFrame(columns=columns)
+    _require_columns(attempts_df, SEARCH_ATTEMPT_COLUMNS, path)
 
     return attempts_df
 

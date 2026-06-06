@@ -9,10 +9,10 @@ Utilities for producing and executing web search queries.
 
 Current provider support is focused on Brave Search.
 
-Query generation accepts an explicit `search_languages` list. The default is French
-for backward compatibility, while the France search scripts currently request both
-French and English with `["fr", "en"]`. This is an explicit configuration, not an
-automatic local-language inference system.
+Query generation accepts an explicit `search_languages` list. Production search
+scripts pass the intended languages directly, for example French and English with
+`["fr", "en"]`. This is explicit configuration, not automatic local-language
+inference.
 
 For the worldwide sentence pilot, queries are built in English plus a resolved
 local language. This resolved value is stored separately as `query_local_language`

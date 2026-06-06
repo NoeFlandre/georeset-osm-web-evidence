@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from georeset_osm_web_evidence.web.html import extract_readable_text
+from georeset_osm_web_evidence.web.html import extract_title
 from georeset_osm_web_evidence.web.text import fetch_page_text
 
 
@@ -33,12 +33,14 @@ class FakeReadableText:
         return None
 
 
-class ExtractReadableTextTests(unittest.TestCase):
-    def test_extracts_visible_text_and_ignores_script_and_style(self):
+class WebTextTests(unittest.TestCase):
+    def test_extracts_html_title(self):
         html = """
         <html>
           <head>
-            <title>Ignored title</title>
+            <title>
+                Forest management plan
+            </title>
             <style>.hidden { display: none; }</style>
             <script>console.log("ignore me")</script>
           </head>
@@ -50,13 +52,9 @@ class ExtractReadableTextTests(unittest.TestCase):
         </html>
         """
 
-        text = extract_readable_text(html)
+        title = extract_title(html)
 
-        self.assertIn("Forest management plan", text)
-        self.assertIn("The forest is protected.", text)
-        self.assertIn("It contains wetlands and trails.", text)
-        self.assertNotIn("console.log", text)
-        self.assertNotIn("display: none", text)
+        self.assertEqual(title, "Forest management plan")
 
     def test_fetch_marks_empty_extracted_text_as_error(self):
         with patch("georeset_osm_web_evidence.web.text.requests.get") as get:
@@ -74,7 +72,7 @@ class ExtractReadableTextTests(unittest.TestCase):
 
         self.assertIn("Forest evidence text", result["text"])
         self.assertIsNone(result["fetch_error"])
-        self.assertIn(result["extraction_method"], {"trafilatura", "html_parser"})
+        self.assertEqual(result["extraction_method"], "trafilatura")
         self.assertIsNone(result["extraction_error"])
 
 

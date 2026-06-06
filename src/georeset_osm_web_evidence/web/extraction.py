@@ -2,8 +2,6 @@ from dataclasses import dataclass
 
 import trafilatura
 
-from georeset_osm_web_evidence.web.html import extract_readable_text
-
 
 @dataclass
 class ExtractionResult:
@@ -34,28 +32,22 @@ def extract_with_trafilatura(html: str, url: str | None = None) -> str | None:
 def extract_best_text(html: str, url: str | None = None) -> ExtractionResult:
     try:
         text = extract_with_trafilatura(html=html, url=url)
-
-        if text is not None:
-            return ExtractionResult(
-                text=text,
-                method="trafilatura",
-                error=None,
-            )
-
     except Exception as error:
-        trafilatura_error = str(error)
-    else:
-        trafilatura_error = None
-
-    fallback_text = extract_readable_text(html)
-
-    if fallback_text:
         return ExtractionResult(
-            text=fallback_text,
-            method="html_parser",
-            error=trafilatura_error,
+            text=None,
+            method=None,
+            error=str(error),
+        )
+
+    if text is not None:
+        return ExtractionResult(
+            text=text,
+            method="trafilatura",
+            error=None,
         )
 
     return ExtractionResult(
-        text=None, method=None, error=trafilatura_error or "No readable text extracted"
+        text=None,
+        method=None,
+        error="No readable text extracted",
     )
