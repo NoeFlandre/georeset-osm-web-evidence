@@ -121,6 +121,7 @@ PAGE_TEXT_COLUMNS = [
     "country",
     "local_language",
     "query_local_language",
+    "query_language",
     "area_size_bin",
     "polygon_category",
 ]
@@ -420,6 +421,10 @@ def fetch_candidate_pages(
         page_text_df = pd.read_parquet(output_path)
         if "source_url" not in page_text_df.columns:
             raise ValueError(f"{output_path} is missing required column: source_url")
+        for column in PAGE_TEXT_COLUMNS:
+            if column not in page_text_df.columns:
+                page_text_df[column] = pd.NA
+        page_text_df = page_text_df[PAGE_TEXT_COLUMNS]
     else:
         page_text_df = pd.DataFrame(columns=PAGE_TEXT_COLUMNS)
 
@@ -466,6 +471,7 @@ def fetch_candidate_pages(
                 "country": row.country,
                 "local_language": row.local_language,
                 "query_local_language": row.query_local_language,
+                "query_language": getattr(row, "query_language", None),
                 "area_size_bin": row.area_size_bin,
                 "polygon_category": row.polygon_category,
             }

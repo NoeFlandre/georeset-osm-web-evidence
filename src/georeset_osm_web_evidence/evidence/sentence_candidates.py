@@ -1,6 +1,15 @@
+import re
+
+import justext
 import pandas as pd
 
 from georeset_osm_web_evidence.text.sentences import extract_sentence_candidates
+
+ENGLISH_STOPWORDS = justext.get_stoplist("English")
+NON_ENGLISH_STOPLISTS = [
+    justext.get_stoplist(language)
+    for language in ["Dutch", "French", "German", "Polish", "Portuguese", "Spanish"]
+]
 
 SENTENCE_CANDIDATE_COLUMNS = [
     "osm_type",
@@ -16,6 +25,7 @@ SENTENCE_CANDIDATE_COLUMNS = [
     "text_length",
     "quality_score",
     "quality_flags",
+    "query_language",
     "sentence",
 ]
 
@@ -46,12 +56,43 @@ def build_sentence_candidate_dataframe(text_df: pd.DataFrame) -> pd.DataFrame:
                     "text_length": row["text_length"],
                     "quality_score": row["quality_score"],
                     "quality_flags": row["quality_flags"],
+                    "query_language": row.get("query_language", pd.NA),
                     "sentence": sentence,
                 }
             )
 
     sentence_df = pd.DataFrame(sentence_rows, columns=SENTENCE_CANDIDATE_COLUMNS)
     return sentence_df
+
+
+def looks_like_english_sentence(sentence: str) -> bool:
+    tokens = re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", sentence.lower())
+    if not tokens:
+        return False
+
+    english_count = sum(token in ENGLISH_STOPWORDS for token in tokens)
+    non_english_count = max(
+        sum(token in stoplist for token in tokens)
+        for stoplist in NON_ENGLISH_STOPLISTS
+    )
+
+    return english_count >= 2 and english_count >= non_english_count
+
+
+def filter_english_sentence_candidates(sentence_df: pd.DataFrame) -> pd.DataFrame:
+    if sentence_df.empty:
+        return sentence_df.copy()
+
+    language_column = (
+        "query_language"
+        if "query_language" in sentence_df.columns
+        else "query_local_language"
+    )
+    english_query_df = sentence_df[sentence_df[language_column].eq("en")]
+    english_sentence_mask = english_query_df["sentence"].map(
+        looks_like_english_sentence
+    )
+    return english_query_df[english_sentence_mask].reset_index(drop=True)
 
 
 def limit_sentence_candidates(

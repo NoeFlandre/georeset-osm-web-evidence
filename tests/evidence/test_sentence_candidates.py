@@ -5,7 +5,9 @@ import pandas as pd
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     SENTENCE_CANDIDATE_COLUMNS,
     build_sentence_candidate_dataframe,
+    filter_english_sentence_candidates,
     limit_sentence_candidates,
+    looks_like_english_sentence,
     select_complete_sentence_candidates,
 )
 
@@ -178,6 +180,43 @@ class TestEvidenceSentenceCandidate(unittest.TestCase):
         self.assertEqual(
             complete_df["sentence"].to_list(),
             [f"Complete sentence {url_index}" for url_index in range(10)],
+        )
+
+    def test_filters_english_sentence_candidates(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "query_local_language": "en",
+                    "sentence": "The forest contains wetlands and open grassland habitats.",
+                },
+                {
+                    "query_local_language": "en",
+                    "sentence": "Reserva Extrativista de São João da Ponta Área protegida.",
+                },
+                {
+                    "query_local_language": "fr",
+                    "sentence": "The forest contains wetlands and open grassland habitats.",
+                },
+            ]
+        )
+
+        english_df = filter_english_sentence_candidates(sentence_df)
+
+        self.assertEqual(
+            english_df["sentence"].to_list(),
+            ["The forest contains wetlands and open grassland habitats."],
+        )
+
+    def test_english_sentence_heuristic_rejects_dutch_false_positive(self):
+        self.assertFalse(
+            looks_like_english_sentence(
+                "De plas is daarna in beheer van Staatsbosbeheer gekomen."
+            )
+        )
+        self.assertTrue(
+            looks_like_english_sentence(
+                "The lake is now managed by the national forestry agency."
+            )
         )
 
 

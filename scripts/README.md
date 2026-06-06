@@ -32,6 +32,7 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 - `evidence/sample_sentence_candidates.py` samples high-quality sentence candidates for manual inspection or LLM labeling.
 - `evidence/build_labeling_candidates.py` deduplicates high-quality sentence candidates, assigns stable IDs, and writes parquet plus JSONL inputs for LLM labeling.
 - `evidence/run_worldwide_sentence_pilot.py` runs the 10-polygon worldwide pilot end to end: localized Brave Search, candidate URL selection, page text fetching, quality metadata, and sentence candidate extraction capped at 10 sentences per polygon and 1 sentence per URL.
+- `evidence/build_english_only_sentence_pilot.py` reuses the worldwide pilot search cache, keeps English-query candidate URLs, filters sentence candidates with an English stopword heuristic, and writes a parallel 10-polygon English-only pilot.
 
 ## Labeling
 
