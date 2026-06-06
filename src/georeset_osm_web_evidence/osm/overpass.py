@@ -14,12 +14,12 @@ def build_polygon_query(
     require_name: bool = False,
 ) -> str:
     name_filter = '["name"]' if require_name else ""
+    # Ways cover simple closed polygons; relations cover multipolygons.
     tag_filters = "\n".join(
-        f' way["{key}"="{value}"]{name_filter}({south},{west},{north},{east});\n'  # a way is a single closed polygon
-        f' relation["{key}"="{value}"]{name_filter}({south},{west},{north},{east});'  # a relation is more complex polygon, often having holes or multiple parts
+        f' way["{key}"="{value}"]{name_filter}({south},{west},{north},{east});\n'
+        f' relation["{key}"="{value}"]{name_filter}({south},{west},{north},{east});'
         for key, value in tags
     )
-    # we want the results back within 240s as a json of the gemoetry and the tags
     return f"""
 [out:json][timeout:240];
 (

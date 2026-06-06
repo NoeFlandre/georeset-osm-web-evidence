@@ -1,8 +1,8 @@
 # Repository Diagrams
 
-These diagrams describe the current repository structure and implemented
-pipeline. They intentionally omit future ideas, LLM judging, and downstream NER
-because those are not implemented in the current codebase.
+These diagrams describe the repository structure and implemented pipeline. They
+omit open research ideas and downstream analysis steps that are not part of the
+artifact pipeline.
 
 ## High-Level Architecture
 
@@ -73,9 +73,9 @@ flowchart LR
     Evidence --> Review --> ReviewArtifact
 ```
 
-The search stage currently removes Wikipedia URLs before page-text fetching.
-That choice is documented as future work in the main README because it may be
-too strict.
+The search URL stage removes Wikipedia URLs before page-text fetching. This is a
+known limitation because coordinate-based Wikipedia geosearch can miss relevant
+articles without coordinates.
 
 ## Script Workflow
 

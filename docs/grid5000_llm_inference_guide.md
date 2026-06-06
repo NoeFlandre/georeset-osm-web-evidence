@@ -185,7 +185,7 @@ Create a local ignored launcher such as:
 .grid5000/run_llama_cpp_smoke_<site>.sh
 ```
 
-Then sync it to the frontend under an ignored or temporary name.
+Then sync it to the frontend under an ignored launcher path.
 
 The launcher should do these steps:
 
@@ -369,8 +369,8 @@ Llama.create_chat_completion() got an unexpected keyword argument 'chat_template
 Cause: in `llama-cpp-python==0.3.25`, `create_chat_completion(...)` does not
 accept template kwargs directly.
 
-Fix: attach template kwargs to the model chat handler after load. The current
-adapter does this in `apply_chat_template_kwargs(...)`.
+Fix: attach template kwargs to the model chat handler after load. The adapter
+does this in `apply_chat_template_kwargs(...)`.
 
 ### Wrong CUDA Architecture
 
@@ -417,5 +417,5 @@ Before scaling to thousands of sentences:
 6. Keep model cache persistent.
 7. Keep job launchers and logs ignored.
 
-The next engineering step should be a resumable batch runner that writes partial
+For production-scale labeling, use a resumable batch runner that writes partial
 LLM labels to parquet or JSONL after each chunk.
