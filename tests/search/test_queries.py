@@ -1,6 +1,12 @@
 import unittest
 
+from georeset_osm_web_evidence.osm.worldwide_bboxes import WORLDWIDE_TRAINING_BBOXES
+from georeset_osm_web_evidence.osm.worldwide_extract_configs import (
+    DEFAULT_LANGUAGE_BY_REGION,
+    EXTRACT_CONFIGS,
+)
 from georeset_osm_web_evidence.search.queries import build_search_queries
+from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
 
 
 class SearchQueryTests(unittest.TestCase):
@@ -52,6 +58,45 @@ class SearchQueryTests(unittest.TestCase):
 
         self.assertEqual(len(queries), len(set(queries)))
         self.assertEqual(queries.count('"Marais Alpha" conservation'), 1)
+
+    def test_builds_spanish_local_language_queries(self):
+        queries = build_search_queries(
+            {
+                "name": "Parque-Reserva Natural de las Quinientas",
+                "leisure": "nature_reserve",
+            },
+            search_languages=["es"],
+        )
+
+        self.assertIn(
+            '"Parque-Reserva Natural de las Quinientas" reserva natural',
+            queries,
+        )
+        self.assertIn(
+            '"Parque-Reserva Natural de las Quinientas" conservación',
+            queries,
+        )
+
+    def test_builds_sinhala_local_language_queries(self):
+        queries = build_search_queries(
+            {"name": "Rice", "landuse": "farmland"},
+            search_languages=["si"],
+        )
+
+        self.assertIn('"Rice" කෘෂිකර්මය', queries)
+        self.assertIn('"Rice" වගාව', queries)
+
+    def test_terms_cover_all_configured_worldwide_local_languages(self):
+        configured_languages = (
+            {config["local_language"] for config in EXTRACT_CONFIGS}
+            | {bbox["local_language"] for bbox in WORLDWIDE_TRAINING_BBOXES}
+            | set(DEFAULT_LANGUAGE_BY_REGION.values())
+        )
+
+        self.assertEqual(
+            sorted(configured_languages - set(TERMS_BY_LANGUAGE)),
+            [],
+        )
 
 
 if __name__ == "__main__":

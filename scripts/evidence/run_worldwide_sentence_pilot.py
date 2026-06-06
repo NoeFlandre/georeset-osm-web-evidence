@@ -1,0 +1,300 @@
+import json
+import logging
+import os
+import time
+from pathlib import Path
+
+import pandas as pd
+
+from georeset_osm_web_evidence.evidence.page_text import build_page_text_row
+from georeset_osm_web_evidence.evidence.sentence_candidates import (
+    build_sentence_candidate_dataframe,
+)
+from georeset_osm_web_evidence.evidence.worldwide_pilot import (
+    add_pilot_metadata,
+    attach_polygon_metadata,
+    build_candidate_urls,
+    build_limited_localized_queries,
+    build_search_rows_for_query,
+    select_stratified_pilot_polygons,
+    summarize_sentence_pilot,
+)
+from georeset_osm_web_evidence.search.providers import search_brave
+from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
+from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
+from georeset_osm_web_evidence.web.quality import add_quality_metadata
+from georeset_osm_web_evidence.web.text import fetch_page_text
+
+
+INPUT_POLYGONS_PATH = Path(
+    "data/processed/samples/worldwide_training_polygon_sample.parquet"
+)
+OUTPUT_DIR = Path("data/processed/pilots/worldwide_sentence_pilot_10")
+
+PILOT_POLYGONS_PATH = OUTPUT_DIR / "pilot_polygons.parquet"
+SEARCH_RESULTS_PATH = OUTPUT_DIR / "search_results.parquet"
+SEARCH_ATTEMPTS_PATH = OUTPUT_DIR / "search_attempts.parquet"
+CANDIDATE_URLS_PATH = OUTPUT_DIR / "candidate_urls.parquet"
+FETCH_URLS_PATH = OUTPUT_DIR / "candidate_urls_to_fetch.parquet"
+PAGE_TEXT_PATH = OUTPUT_DIR / "page_text.parquet"
+PAGE_TEXT_WITH_QUALITY_PATH = OUTPUT_DIR / "page_text_with_quality.parquet"
+SENTENCE_CANDIDATES_PATH = OUTPUT_DIR / "sentence_candidates.parquet"
+ANALYSIS_PATH = OUTPUT_DIR / "analysis.json"
+LOG_PATH = OUTPUT_DIR / "run.log"
+OUTPUT_ARTIFACT_PATHS = [
+    PILOT_POLYGONS_PATH,
+    SEARCH_RESULTS_PATH,
+    SEARCH_ATTEMPTS_PATH,
+    CANDIDATE_URLS_PATH,
+    FETCH_URLS_PATH,
+    PAGE_TEXT_PATH,
+    PAGE_TEXT_WITH_QUALITY_PATH,
+    SENTENCE_CANDIDATES_PATH,
+    ANALYSIS_PATH,
+]
+
+SAMPLE_SIZE = int(os.environ.get("WORLDWIDE_SENTENCE_PILOT_SAMPLE_SIZE", "10"))
+RESULTS_PER_QUERY = int(os.environ.get("WORLDWIDE_SENTENCE_PILOT_RESULTS_PER_QUERY", "5"))
+MAX_QUERIES_PER_POLYGON = int(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON", "4")
+)
+MAX_URLS_PER_POLYGON = int(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "3")
+)
+SEARCH_DELAY_SECONDS = float(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_SEARCH_DELAY_SECONDS", "1.2")
+)
+FETCH_DELAY_SECONDS = float(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_DELAY_SECONDS", "1.0")
+)
+PAGE_TEXT_COLUMNS = [
+    "osm_type",
+    "osm_id",
+    "polygon_name",
+    "has_wikipedia_articles",
+    "provider",
+    "source_url",
+    "search_title",
+    "search_description",
+    "search_queries",
+    "url",
+    "final_url",
+    "status_code",
+    "title",
+    "text",
+    "text_length",
+    "fetch_error",
+    "extraction_method",
+    "extraction_error",
+    "best_rank",
+    "world_region",
+    "country",
+    "local_language",
+    "query_local_language",
+    "area_size_bin",
+    "polygon_category",
+]
+
+
+def configure_logging() -> logging.Logger:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("worldwide_sentence_pilot")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    file_handler = logging.FileHandler(LOG_PATH, mode="w")
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return logger
+
+
+def reset_output_artifacts() -> None:
+    for path in OUTPUT_ARTIFACT_PATHS:
+        path.unlink(missing_ok=True)
+
+
+def build_pilot_queries(polygon_row) -> list[tuple[str, str]]:
+    return build_limited_localized_queries(
+        osm_tags=polygon_row.osm_tags,
+        local_language=getattr(polygon_row, "query_local_language", None),
+        supported_languages=set(TERMS_BY_LANGUAGE),
+        max_queries=MAX_QUERIES_PER_POLYGON,
+    )
+
+
+def collect_search_results(
+    pilot_gdf: pd.DataFrame,
+    logger: logging.Logger,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    result_rows = []
+    attempt_rows = []
+
+    for polygon_index, polygon_row in enumerate(pilot_gdf.itertuples(), start=1):
+        queries_with_language = build_pilot_queries(polygon_row)
+        logger.info(
+            "Searching polygon %s/%s: %s (%s queries)",
+            polygon_index,
+            len(pilot_gdf),
+            polygon_row.polygon_name,
+            len(queries_with_language),
+        )
+
+        for query_language, query in queries_with_language:
+            try:
+                results = search_brave(query, count=RESULTS_PER_QUERY)
+                search_error = None
+            except Exception as error:
+                logger.exception("Search failed for query: %s", query)
+                results = []
+                search_error = str(error)
+
+            query_result_rows, attempt_row = build_search_rows_for_query(
+                polygon_row=polygon_row,
+                query_language=query_language,
+                query=query,
+                results=results,
+                search_error=search_error,
+            )
+            attempt_rows.append(attempt_row)
+            result_rows.extend(query_result_rows)
+
+            time.sleep(SEARCH_DELAY_SECONDS)
+
+    return pd.DataFrame(result_rows), pd.DataFrame(attempt_rows)
+
+
+def fetch_candidate_pages(
+    candidate_urls_df: pd.DataFrame,
+    logger: logging.Logger,
+) -> pd.DataFrame:
+    page_rows = []
+
+    for url_index, row in enumerate(candidate_urls_df.itertuples(), start=1):
+        logger.info("Fetching URL %s/%s: %s", url_index, len(candidate_urls_df), row.url)
+        page_text = fetch_page_text(row.url)
+        page_row = build_page_text_row(row, page_text)
+        page_row.update({
+            "best_rank": row.best_rank,
+            "world_region": row.world_region,
+            "country": row.country,
+            "local_language": row.local_language,
+            "query_local_language": row.query_local_language,
+            "area_size_bin": row.area_size_bin,
+            "polygon_category": row.polygon_category,
+        })
+        page_rows.append(page_row)
+
+        time.sleep(FETCH_DELAY_SECONDS)
+
+    return pd.DataFrame(page_rows, columns=PAGE_TEXT_COLUMNS)
+
+
+def enrich_sentence_metadata(
+    sentence_df: pd.DataFrame,
+    pilot_gdf: pd.DataFrame,
+) -> pd.DataFrame:
+    if sentence_df.empty:
+        return sentence_df
+
+    return attach_polygon_metadata(sentence_df, pilot_gdf)
+
+
+def write_analysis(
+    analysis: dict,
+    logger: logging.Logger,
+) -> None:
+    ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
+    logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
+
+
+def main() -> None:
+    logger = configure_logging()
+    reset_output_artifacts()
+    logger.info("Starting worldwide sentence pilot")
+    logger.info("Input polygons: %s", INPUT_POLYGONS_PATH)
+    logger.info("Output directory: %s", OUTPUT_DIR)
+    logger.info(
+        "Pilot settings: sample_size=%s, results_per_query=%s, "
+        "max_queries_per_polygon=%s, max_urls_per_polygon=%s",
+        SAMPLE_SIZE,
+        RESULTS_PER_QUERY,
+        MAX_QUERIES_PER_POLYGON,
+        MAX_URLS_PER_POLYGON,
+    )
+
+    source_gdf = load_geodataframe(INPUT_POLYGONS_PATH)
+    pilot_gdf = select_stratified_pilot_polygons(
+        source_gdf,
+        sample_size=SAMPLE_SIZE,
+        random_state=42,
+    )
+    pilot_gdf = add_pilot_metadata(pilot_gdf)
+    save_geodataframe(pilot_gdf, PILOT_POLYGONS_PATH)
+    logger.info("Saved %s pilot polygons to %s", len(pilot_gdf), PILOT_POLYGONS_PATH)
+    logger.info(
+        "Pilot region distribution: %s",
+        pilot_gdf["world_region"].value_counts().sort_index().to_dict(),
+    )
+    logger.info(
+        "Pilot area-bin distribution: %s",
+        pilot_gdf["area_size_bin"].value_counts().sort_index().to_dict(),
+    )
+
+    search_results_df, search_attempts_df = collect_search_results(pilot_gdf, logger)
+    search_results_df.to_parquet(SEARCH_RESULTS_PATH, index=False)
+    search_attempts_df.to_parquet(SEARCH_ATTEMPTS_PATH, index=False)
+    logger.info("Saved %s search results to %s", len(search_results_df), SEARCH_RESULTS_PATH)
+    logger.info(
+        "Saved %s search attempts to %s",
+        len(search_attempts_df),
+        SEARCH_ATTEMPTS_PATH,
+    )
+
+    candidate_urls_df = build_candidate_urls(search_results_df)
+    candidate_urls_df = attach_polygon_metadata(candidate_urls_df, pilot_gdf)
+    candidate_urls_df.to_parquet(CANDIDATE_URLS_PATH, index=False)
+    fetch_urls_df = build_candidate_urls(
+        search_results_df,
+        max_urls_per_polygon=MAX_URLS_PER_POLYGON,
+    )
+    fetch_urls_df = attach_polygon_metadata(fetch_urls_df, pilot_gdf)
+    fetch_urls_df.to_parquet(FETCH_URLS_PATH, index=False)
+    logger.info("Saved %s candidate URLs to %s", len(candidate_urls_df), CANDIDATE_URLS_PATH)
+    logger.info("Selected %s URLs to fetch at %s", len(fetch_urls_df), FETCH_URLS_PATH)
+
+    page_text_df = fetch_candidate_pages(fetch_urls_df, logger)
+    page_text_df.to_parquet(PAGE_TEXT_PATH, index=False)
+    logger.info("Saved %s fetched page rows to %s", len(page_text_df), PAGE_TEXT_PATH)
+
+    page_text_with_quality_df = add_quality_metadata(page_text_df)
+    page_text_with_quality_df.to_parquet(PAGE_TEXT_WITH_QUALITY_PATH, index=False)
+    logger.info("Saved quality metadata to %s", PAGE_TEXT_WITH_QUALITY_PATH)
+
+    sentence_df = build_sentence_candidate_dataframe(page_text_with_quality_df)
+    sentence_df = enrich_sentence_metadata(sentence_df, pilot_gdf)
+    sentence_df.to_parquet(SENTENCE_CANDIDATES_PATH, index=False)
+    logger.info(
+        "Saved %s sentence candidates to %s",
+        len(sentence_df),
+        SENTENCE_CANDIDATES_PATH,
+    )
+
+    analysis = summarize_sentence_pilot(
+        polygons_df=pilot_gdf,
+        search_results_df=search_results_df,
+        candidate_urls_df=candidate_urls_df,
+        page_text_df=page_text_with_quality_df,
+        sentence_df=sentence_df,
+    )
+    write_analysis(analysis, logger)
+    logger.info("Worldwide sentence pilot finished")
+
+
+if __name__ == "__main__":
+    main()

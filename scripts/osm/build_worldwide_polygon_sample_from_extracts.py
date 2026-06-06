@@ -21,6 +21,19 @@ from georeset_osm_web_evidence.osm.worldwide import (
     filter_named_environmental_polygons,
     sample_worldwide_polygons,
 )
+from georeset_osm_web_evidence.osm.worldwide_planning import (
+    compute_region_sample_deficits,
+    is_better_worldwide_sample,
+    rank_extract_configs_by_region_deficit,
+    region_count_spread,
+)
+from georeset_osm_web_evidence.osm.worldwide_extract_configs import (
+    DEFAULT_LANGUAGE_BY_REGION,
+    EXTRACT_CONFIGS,
+    REGION_BY_GEOFABRIK_ROOT,
+    SKIP_DISCOVERED_EXTRACT_IDS,
+    configured_world_regions,
+)
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.viz.map import create_polygon_map
 
@@ -78,28 +91,6 @@ TOOLTIP_COLUMNS = [
 ]
 
 
-def compute_region_sample_deficits(
-    sample_gdf: gpd.GeoDataFrame,
-    target_sample_size: int,
-) -> dict[str, int]:
-    regions = sorted(set(REGION_BY_GEOFABRIK_ROOT.values()))
-    if not regions:
-        return {}
-
-    base_target = target_sample_size // len(regions)
-    remainder = target_sample_size % len(regions)
-    region_targets = {
-        region: base_target + int(index < remainder)
-        for index, region in enumerate(regions)
-    }
-    region_counts = sample_gdf["world_region"].value_counts().to_dict()
-
-    return {
-        region: max(region_targets[region] - int(region_counts.get(region, 0)), 0)
-        for region in regions
-    }
-
-
 def load_region_sample_deficits(
     sample_path: str,
     target_sample_size: int,
@@ -111,179 +102,11 @@ def load_region_sample_deficits(
     if "world_region" not in sample_gdf.columns:
         return {}
 
-    return compute_region_sample_deficits(sample_gdf, target_sample_size)
-
-
-def rank_extract_configs_by_region_deficit(
-    extract_configs: list[dict],
-    region_deficits: dict[str, int],
-) -> list[dict]:
-    indexed_configs = list(enumerate(extract_configs))
-    indexed_configs.sort(
-        key=lambda item: (
-            -region_deficits.get(item[1]["world_region"], 0),
-            item[0],
-        )
+    return compute_region_sample_deficits(
+        sample_gdf,
+        target_sample_size,
+        regions=configured_world_regions(),
     )
-
-    return [extract_config for _, extract_config in indexed_configs]
-
-
-def region_count_spread(sample_gdf: pd.DataFrame) -> int:
-    if sample_gdf.empty or "world_region" not in sample_gdf.columns:
-        return 0
-
-    known_regions = sorted(set(REGION_BY_GEOFABRIK_ROOT.values()))
-    region_counts = sample_gdf["world_region"].value_counts().to_dict()
-    counts = [int(region_counts.get(region, 0)) for region in known_regions]
-
-    return max(counts) - min(counts)
-
-
-def is_better_worldwide_sample(
-    candidate_sample: pd.DataFrame,
-    candidate_distance_km: int,
-    current_best_sample: pd.DataFrame,
-    current_best_distance_km: int | None,
-    target_sample_size: int,
-) -> bool:
-    candidate_is_full = len(candidate_sample) >= target_sample_size
-    current_best_is_full = len(current_best_sample) >= target_sample_size
-
-    if candidate_is_full != current_best_is_full:
-        return candidate_is_full
-
-    if not candidate_is_full and len(candidate_sample) != len(current_best_sample):
-        return len(candidate_sample) > len(current_best_sample)
-
-    candidate_spread = region_count_spread(candidate_sample)
-    current_best_spread = region_count_spread(current_best_sample)
-    if candidate_spread != current_best_spread:
-        return candidate_spread < current_best_spread
-
-    if current_best_distance_km is None:
-        return True
-
-    return candidate_distance_km > current_best_distance_km
-
-EXTRACT_CONFIGS = [
-    {"extract_id": "andorra", "world_region": "Europe", "local_language": "ca"},
-    {"extract_id": "liechtenstein", "world_region": "Europe", "local_language": "de"},
-    {"extract_id": "luxembourg", "world_region": "Europe", "local_language": "lb"},
-    {"extract_id": "albania", "world_region": "Europe", "local_language": "sq"},
-    {"extract_id": "estonia", "world_region": "Europe", "local_language": "et"},
-    {"extract_id": "slovenia", "world_region": "Europe", "local_language": "sl"},
-    {"extract_id": "croatia", "world_region": "Europe", "local_language": "hr"},
-    {"extract_id": "iceland", "world_region": "Europe", "local_language": "is"},
-    {"extract_id": "georgia", "world_region": "Asia", "local_language": "ka"},
-    {"extract_id": "macedonia", "world_region": "Europe", "local_language": "mk"},
-    {"extract_id": "moldova", "world_region": "Europe", "local_language": "ro"},
-    {"extract_id": "montenegro", "world_region": "Europe", "local_language": "sr"},
-    {"extract_id": "kosovo", "world_region": "Europe", "local_language": "sq"},
-    {"extract_id": "serbia", "world_region": "Europe", "local_language": "sr"},
-    {"extract_id": "bosnia-herzegovina", "world_region": "Europe", "local_language": "bs"},
-    {"extract_id": "kenya", "world_region": "Africa", "local_language": "sw"},
-    {"extract_id": "ghana", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "rwanda", "world_region": "Africa", "local_language": "rw"},
-    {"extract_id": "uganda", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "senegal-and-gambia", "world_region": "Africa", "local_language": "fr"},
-    {"extract_id": "malawi", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "zambia", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "zimbabwe", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "botswana", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "namibia", "world_region": "Africa", "local_language": "en"},
-    {"extract_id": "tunisia", "world_region": "Africa", "local_language": "ar"},
-    {"extract_id": "morocco", "world_region": "Africa", "local_language": "ar"},
-    {"extract_id": "madagascar", "world_region": "Africa", "local_language": "mg"},
-    {"extract_id": "tanzania", "world_region": "Africa", "local_language": "sw"},
-    {"extract_id": "ethiopia", "world_region": "Africa", "local_language": "am"},
-    {"extract_id": "cameroon", "world_region": "Africa", "local_language": "fr"},
-    {"extract_id": "gabon", "world_region": "Africa", "local_language": "fr"},
-    {"extract_id": "nepal", "world_region": "Asia", "local_language": "ne"},
-    {"extract_id": "sri-lanka", "world_region": "Asia", "local_language": "si"},
-    {"extract_id": "kyrgyzstan", "world_region": "Asia", "local_language": "ky"},
-    {"extract_id": "taiwan", "world_region": "Asia", "local_language": "zh"},
-    {"extract_id": "laos", "world_region": "Asia", "local_language": "lo"},
-    {"extract_id": "cambodia", "world_region": "Asia", "local_language": "km"},
-    {"extract_id": "bangladesh", "world_region": "Asia", "local_language": "bn"},
-    {"extract_id": "armenia", "world_region": "Asia", "local_language": "hy"},
-    {"extract_id": "azerbaijan", "world_region": "Asia", "local_language": "az"},
-    {"extract_id": "lebanon", "world_region": "Asia", "local_language": "ar"},
-    {"extract_id": "jordan", "world_region": "Asia", "local_language": "ar"},
-    {"extract_id": "israel-and-palestine", "world_region": "Asia", "local_language": "he"},
-    {"extract_id": "mongolia", "world_region": "Asia", "local_language": "mn"},
-    {"extract_id": "tajikistan", "world_region": "Asia", "local_language": "tg"},
-    {"extract_id": "us/vermont", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "us/maine", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "us/colorado", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "new-brunswick", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "nova-scotia", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "costa-rica", "world_region": "North America", "local_language": "es"},
-    {"extract_id": "guatemala", "world_region": "North America", "local_language": "es"},
-    {"extract_id": "panama", "world_region": "North America", "local_language": "es"},
-    {"extract_id": "belize", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "haiti-and-domrep", "world_region": "North America", "local_language": "es"},
-    {"extract_id": "jamaica", "world_region": "North America", "local_language": "en"},
-    {"extract_id": "uruguay", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "paraguay", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "bolivia", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "ecuador", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "suriname", "world_region": "South America", "local_language": "nl"},
-    {"extract_id": "guyana", "world_region": "South America", "local_language": "en"},
-    {"extract_id": "chile", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "colombia", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "peru", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "fiji", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "new-zealand", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "tasmania", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "new-caledonia", "world_region": "Oceania", "local_language": "fr"},
-    {"extract_id": "solomon-islands", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "vanuatu", "world_region": "Oceania", "local_language": "bi"},
-    {"extract_id": "samoa", "world_region": "Oceania", "local_language": "sm"},
-    {"extract_id": "venezuela", "world_region": "South America", "local_language": "es"},
-    {"extract_id": "norte", "world_region": "South America", "local_language": "pt"},
-    {"extract_id": "centro-oeste", "world_region": "South America", "local_language": "pt"},
-    {"extract_id": "western-australia", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "queensland", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "victoria", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "new-south-wales", "world_region": "Oceania", "local_language": "en"},
-    {"extract_id": "egypt", "world_region": "Africa", "local_language": "ar"},
-    {"extract_id": "mali", "world_region": "Africa", "local_language": "fr"},
-    {"extract_id": "somalia", "world_region": "Africa", "local_language": "so"},
-    {"extract_id": "sudan", "world_region": "Africa", "local_language": "ar"},
-    {"extract_id": "mozambique", "world_region": "Africa", "local_language": "pt"},
-    {"extract_id": "algeria", "world_region": "Africa", "local_language": "ar"},
-]
-
-REGION_BY_GEOFABRIK_ROOT = {
-    "africa": "Africa",
-    "asia": "Asia",
-    "australia-oceania": "Oceania",
-    "central-america": "North America",
-    "europe": "Europe",
-    "north-america": "North America",
-    "south-america": "South America",
-}
-
-DEFAULT_LANGUAGE_BY_REGION = {
-    "Africa": "en",
-    "Asia": "en",
-    "Europe": "en",
-    "North America": "en",
-    "Oceania": "en",
-    "South America": "es",
-}
-
-SKIP_DISCOVERED_EXTRACT_IDS = {
-    "africa",
-    "antarctica",
-    "asia",
-    "australia-oceania",
-    "central-america",
-    "europe",
-    "north-america",
-    "south-america",
-}
 
 
 def download_json(url: str, path: Path) -> dict:
@@ -579,7 +402,7 @@ def sample_with_relaxed_sparsity(candidates_gdf: gpd.GeoDataFrame) -> gpd.GeoDat
         )
         print(
             "Region count spread for this pass: "
-            f"{region_count_spread(sample_gdf)}"
+            f"{region_count_spread(sample_gdf, regions=configured_world_regions())}"
         )
 
         if is_better_worldwide_sample(
@@ -588,6 +411,7 @@ def sample_with_relaxed_sparsity(candidates_gdf: gpd.GeoDataFrame) -> gpd.GeoDat
             current_best_sample=best_sample,
             current_best_distance_km=best_distance_km,
             target_sample_size=SAMPLE_SIZE,
+            regions=configured_world_regions(),
         ):
             best_sample = sample_gdf
             best_distance_km = min_distance_km
