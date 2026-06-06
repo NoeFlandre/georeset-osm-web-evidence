@@ -1,4 +1,5 @@
 import pandas as pd
+import requests
 
 from georeset_osm_web_evidence.osm.bboxes import FRANCE_TEST_BBOXES
 from georeset_osm_web_evidence.osm.geodataframe import (
@@ -34,7 +35,7 @@ def main() -> None:
 
         try:
             data = fetch_overpass_json(query, max_retries=5, retry_delay_seconds=10)
-        except Exception as error:
+        except requests.RequestException as error:
             print(f"Skipping bbox {index} because Overpass failed : {error}")
             continue
 

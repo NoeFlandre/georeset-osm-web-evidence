@@ -538,7 +538,7 @@ def main() -> None:
 
         try:
             extract_gdf = process_extract(extract_config, geofabrik_lookup)
-        except Exception as error:
+        except requests.RequestException as error:
             print(f"Failed extract {extract_id}: {error}")
             extract_gdf = None
 

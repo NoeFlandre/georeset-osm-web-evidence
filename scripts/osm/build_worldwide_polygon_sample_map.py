@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import requests
 
 from georeset_osm_web_evidence.osm.geodataframe import (
     add_geodesic_area_km2,
@@ -255,7 +256,7 @@ def main() -> None:
 
             try:
                 gdf = fetch_bbox_candidates(bbox_config)
-            except Exception as error:
+            except requests.RequestException as error:
                 print(f"Failed bbox {bbox_config['bbox_id']}: {error}")
                 failed_bbox_ids.append(bbox_config["bbox_id"])
                 attempted_bbox_ids.add(bbox_config["bbox_id"])

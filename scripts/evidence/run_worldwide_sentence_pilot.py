@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 from georeset_osm_web_evidence.evidence.page_text import build_page_text_row
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
@@ -149,8 +150,8 @@ def collect_search_results(
             try:
                 results = search_brave(query, count=RESULTS_PER_QUERY)
                 search_error = None
-            except Exception as error:
-                logger.exception("Search failed for query: %s", query)
+            except requests.RequestException as error:
+                logger.warning("Search request failed for query: %s", query)
                 results = []
                 search_error = str(error)
 
