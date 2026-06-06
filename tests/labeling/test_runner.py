@@ -68,6 +68,21 @@ class LabelingRunnerTests(unittest.TestCase):
         self.assertEqual(labeled_df.loc[2, "llm_label"], None)
         self.assertIn("RuntimeError", labeled_df.loc[2, "parse_error"])
 
+    def test_does_not_mutate_input_dataframe(self):
+        prompt_df = pd.DataFrame(
+            [
+                {
+                    "sentence_id": "s1",
+                    "prompt": "Prompt for wetlands",
+                }
+            ]
+        )
+        original_df = prompt_df.copy(deep=True)
+
+        label_prompt_rows(prompt_df, lambda prompt: "relevant")
+
+        pd.testing.assert_frame_equal(prompt_df, original_df)
+
 
 if __name__ == "__main__":
     unittest.main()

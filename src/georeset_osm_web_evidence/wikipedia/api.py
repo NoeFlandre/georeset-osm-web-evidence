@@ -17,21 +17,20 @@ def geosearch_wikipedia(
     last_error = None
 
     for attempt in range(1, max_retries + 1):
-        response = requests.get(
-            url,
-            params={
-                "action": "query",
-                "list": "geosearch",
-                "gscoord": f"{lat}|{lon}",
-                "gsradius": radius_m,
-                "gslimit": limit,
-                "format": "json",
-            },
-            headers={"User-Agent": "georeset_osm_web_evidence/0.1.0"},
-            timeout=30,
-        )
-
         try:
+            response = requests.get(
+                url,
+                params={
+                    "action": "query",
+                    "list": "geosearch",
+                    "gscoord": f"{lat}|{lon}",
+                    "gsradius": radius_m,
+                    "gslimit": limit,
+                    "format": "json",
+                },
+                headers={"User-Agent": "georeset_osm_web_evidence/0.1.0"},
+                timeout=30,
+            )
             response.raise_for_status()
             data = response.json()
             return data.get("query", {}).get("geosearch", [])

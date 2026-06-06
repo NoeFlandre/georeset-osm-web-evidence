@@ -68,6 +68,33 @@ class WebQualityTests(unittest.TestCase):
         self.assertEqual(result["duplicate_line_fraction"], 2 / 3)
         self.assertIn("duplicate_lines", result["quality_flags"])
 
+    def test_short_line_threshold_is_inclusive_at_half_the_lines(self):
+        text = """
+        Menu
+        Contact
+        This forest has enough words to count as a normal line
+        This wetland also has enough words to count normally
+        """
+
+        result = analyze_text_quality(text)
+
+        self.assertEqual(result["short_line_fraction"], 0.5)
+        self.assertIn("many_short_lines", result["quality_flags"])
+        self.assertEqual(result["quality_score"], 0.7)
+
+    def test_duplicate_line_fraction_counts_all_repeated_occurrences(self):
+        text = """
+        Repeated habitat line with enough words
+        Repeated habitat line with enough words
+        Repeated habitat line with enough words
+        Unique habitat line with enough words
+        """
+
+        result = analyze_text_quality(text)
+
+        self.assertEqual(result["duplicate_line_fraction"], 3 / 4)
+        self.assertIn("duplicate_lines", result["quality_flags"])
+
     def test_assigns_quality_score(self):
         clean_text = """
         The anatomy of the kākāpō typifies the tendency of bird evolution on oceanic islands.

@@ -27,6 +27,18 @@ class SearchLanguageTests(unittest.TestCase):
 
         self.assertEqual(resolve_query_local_language(row), "si")
 
+    def test_override_takes_precedence_over_configured_language(self):
+        row = {
+            "source_extract_id": "sul",
+            "local_language": "es",
+        }
+
+        self.assertEqual(resolve_query_local_language(row), "pt")
+
+    def test_returns_none_without_usable_language(self):
+        self.assertEqual(resolve_query_local_language({}), None)
+        self.assertEqual(resolve_query_local_language({"local_language": ""}), None)
+
 
 if __name__ == "__main__":
     unittest.main()

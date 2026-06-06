@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 
@@ -6,6 +8,8 @@ from georeset_osm_web_evidence.search.coverage import (
     build_expected_query_table,
     choose_unsearched_polygons,
     find_missing_queries,
+    load_existing_search_attempts,
+    load_existing_search_results,
     summarize_search_coverage,
 )
 
@@ -139,6 +143,74 @@ class SearchCoverageTests(unittest.TestCase):
                 '"Forest A" environment',
             ],
         )
+
+    def test_load_existing_search_results_returns_schema_for_missing_file(self):
+        with TemporaryDirectory() as temporary_directory:
+            missing_path = Path(temporary_directory) / "missing.parquet"
+
+            result = load_existing_search_results(missing_path)
+
+        self.assertTrue(result.empty)
+        self.assertEqual(result.columns.to_list(), ["osm_type", "osm_id", "query"])
+
+    def test_load_existing_search_attempts_ignores_legacy_file_without_query_column(self):
+        with TemporaryDirectory() as temporary_directory:
+            attempts_path = Path(temporary_directory) / "attempts.parquet"
+            pd.DataFrame([{"osm_type": "way", "osm_id": 1}]).to_parquet(
+                attempts_path,
+                index=False,
+            )
+
+            result = load_existing_search_attempts(attempts_path)
+
+        self.assertTrue(result.empty)
+        self.assertIn("query", result.columns)
+        self.assertIn("attempted_at", result.columns)
+
+    def test_empty_expected_query_table_keeps_mergeable_schema(self):
+        polygons = pd.DataFrame(
+            columns=[
+                "osm_type",
+                "osm_id",
+                "polygon_name",
+                "has_wikipedia_articles",
+                "osm_tags",
+            ]
+        )
+        results = pd.DataFrame(columns=["osm_type", "osm_id", "query"])
+
+        expected = build_expected_query_table(polygons)
+        missing = find_missing_queries(expected, results)
+
+        self.assertTrue(expected.empty)
+        self.assertEqual(
+            expected.columns.to_list(),
+            [
+                "osm_type",
+                "osm_id",
+                "polygon_name",
+                "has_wikipedia_articles",
+                "query",
+            ],
+        )
+        self.assertTrue(missing.empty)
+
+    def test_choose_unsearched_polygons_respects_zero_limit(self):
+        polygons = pd.DataFrame(
+            [
+                {"osm_type": "way", "osm_id": 1, "has_wikipedia_articles": True},
+                {"osm_type": "way", "osm_id": 2, "has_wikipedia_articles": False},
+            ]
+        )
+        results = pd.DataFrame(columns=["osm_type", "osm_id"])
+
+        selected = choose_unsearched_polygons(
+            polygons,
+            results,
+            polygon_limit=0,
+        )
+
+        self.assertTrue(selected.empty)
 
 
 if __name__ == "__main__":

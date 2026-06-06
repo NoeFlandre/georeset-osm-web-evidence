@@ -3,6 +3,7 @@ import unittest
 import pandas as pd
 
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
+    SENTENCE_CANDIDATE_COLUMNS,
     build_sentence_candidate_dataframe,
 )
 
@@ -67,6 +68,33 @@ class TestEvidenceSentenceCandidate(unittest.TestCase):
         )
         self.assertIn("quality_score", sentence_df.columns)
         self.assertIn("search_queries", sentence_df.columns)
+
+    def test_returns_expected_schema_when_no_sentence_survives(self):
+        text_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 456,
+                    "polygon_name": "Empty Text",
+                    "has_wikipedia_articles": False,
+                    "url": "https://example.com/empty",
+                    "final_url": "https://example.com/empty",
+                    "search_title": "Empty",
+                    "search_description": "Empty",
+                    "search_queries": '"Empty" biodiversité',
+                    "title": "Empty title",
+                    "text_length": 0,
+                    "quality_score": 0.0,
+                    "quality_flags": ["empty_text"],
+                    "text": None,
+                }
+            ]
+        )
+
+        sentence_df = build_sentence_candidate_dataframe(text_df)
+
+        self.assertTrue(sentence_df.empty)
+        self.assertEqual(sentence_df.columns.to_list(), SENTENCE_CANDIDATE_COLUMNS)
 
 
 if __name__ == "__main__":

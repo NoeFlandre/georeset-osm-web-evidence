@@ -59,9 +59,33 @@ class OsmWorldwideTests(unittest.TestCase):
             ["tiny", "small", "medium", "large", "large"],
         )
 
+    def test_area_size_bin_boundaries_match_documented_ranges(self) -> None:
+        gdf = gpd.GeoDataFrame(
+            [
+                {"area_km2": 0.099},
+                {"area_km2": 0.1},
+                {"area_km2": 1.0},
+                {"area_km2": 10.0},
+            ]
+        )
+
+        result = add_area_size_bin(gdf)
+
+        self.assertEqual(
+            result["area_size_bin"].to_list(),
+            ["tiny", "small", "medium", "large"],
+        )
+
     def test_compute_sample_size_uses_planned_sentences_per_polygon(self) -> None:
         self.assertEqual(compute_sample_size(50_000, 10), 5_000)
         self.assertEqual(compute_sample_size(50_001, 10), 5_001)
+
+    def test_compute_sample_size_rejects_non_positive_sentences_per_polygon(self) -> None:
+        with self.assertRaises(ValueError):
+            compute_sample_size(50_000, 0)
+
+        with self.assertRaises(ValueError):
+            compute_sample_size(50_000, -1)
 
     def test_generate_bbox_expansions_builds_neighboring_bbox_targets(self) -> None:
         anchor = {

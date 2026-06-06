@@ -5,6 +5,11 @@ build/
 dist/
 wheels/
 *.egg-info
+.coverage
+.coverage.*
+htmlcov/
+.mutmut-cache/
+mutants/
 
 # Virtual environments
 .venv

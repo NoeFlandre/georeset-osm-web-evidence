@@ -36,6 +36,15 @@ class TestSentences(unittest.TestCase):
             )
         )
 
+    def test_sentence_candidate_word_count_boundaries_are_inclusive(self):
+        eight_words = "one two three four five six seven eight"
+        eighty_words = " ".join(f"word{i}" for i in range(80))
+        eighty_one_words = " ".join(f"word{i}" for i in range(81))
+
+        self.assertTrue(is_sentence_candidate(eight_words))
+        self.assertTrue(is_sentence_candidate(eighty_words))
+        self.assertFalse(is_sentence_candidate(eighty_one_words))
+
     def test_extracts_candidate_sentences(self):
         text = """
         Home.

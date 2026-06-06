@@ -33,15 +33,29 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
         self.assertNotIn("rationale", prompt.lower())
         self.assertNotIn("confidence", prompt.lower())
 
+    def test_rejects_empty_or_non_string_prompt_sentence(self):
+        with self.assertRaises(ValueError):
+            build_binary_label_prompt("")
+
+        with self.assertRaises(ValueError):
+            build_binary_label_prompt(None)
+
     def test_parses_only_binary_labels(self):
         self.assertEqual(parse_binary_label_response(" Relevant \n"), "relevant")
         self.assertEqual(parse_binary_label_response('"irrelevant".'), "irrelevant")
+        self.assertEqual(parse_binary_label_response("```relevant```"), "relevant")
 
         with self.assertRaises(ValueError):
             parse_binary_label_response("relevant because wetlands are visible")
 
         with self.assertRaises(ValueError):
             parse_binary_label_response("maybe")
+
+        with self.assertRaises(ValueError):
+            parse_binary_label_response("relevant!")
+
+        with self.assertRaises(ValueError):
+            parse_binary_label_response(None)
 
     def test_builds_prompt_rows_from_labeling_candidates(self):
         labeling_df = pd.DataFrame(

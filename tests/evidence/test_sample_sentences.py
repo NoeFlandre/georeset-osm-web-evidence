@@ -80,6 +80,43 @@ class TestSampleSentenceCandidates(unittest.TestCase):
             sampled_sentence_df_2["sentence"].to_list(),
         )
 
+    def test_returns_empty_dataframe_when_quality_filter_removes_everything(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "quality_score": 0.2,
+                    "sentence": "This sentence is below the requested quality threshold.",
+                }
+            ]
+        )
+
+        sampled_sentence_df = sample_sentence_candidates(
+            sentence_df,
+            sample_size=10,
+            min_quality_score=0.8,
+        )
+
+        self.assertTrue(sampled_sentence_df.empty)
+        self.assertEqual(sampled_sentence_df.columns.to_list(), sentence_df.columns.to_list())
+
+    def test_zero_sample_size_returns_empty_dataframe(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "quality_score": 1.0,
+                    "sentence": "This high quality sentence should not be sampled with size zero.",
+                }
+            ]
+        )
+
+        sampled_sentence_df = sample_sentence_candidates(
+            sentence_df,
+            sample_size=0,
+            min_quality_score=0.8,
+        )
+
+        self.assertTrue(sampled_sentence_df.empty)
+
 
 if __name__ == "__main__":
     unittest.main()

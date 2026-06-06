@@ -54,6 +54,7 @@ def build_expected_query_table(
     search_languages: list[str] | tuple[str, ...] = ("fr",),
 ) -> pd.DataFrame:
     rows = []
+    columns = POLYGON_KEY + ["polygon_name", "has_wikipedia_articles", "query"]
 
     for polygon_row in polygons_df.itertuples():
         polygon_name = get_osm_name(polygon_row.osm_tags)
@@ -72,7 +73,7 @@ def build_expected_query_table(
                 }
             )
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=columns)
 
 
 def find_missing_queries(

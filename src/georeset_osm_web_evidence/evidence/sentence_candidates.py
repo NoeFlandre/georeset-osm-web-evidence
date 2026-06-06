@@ -2,6 +2,23 @@ import pandas as pd
 
 from georeset_osm_web_evidence.text.sentences import extract_sentence_candidates
 
+SENTENCE_CANDIDATE_COLUMNS = [
+    "osm_type",
+    "osm_id",
+    "polygon_name",
+    "has_wikipedia_articles",
+    "url",
+    "final_url",
+    "search_title",
+    "search_description",
+    "search_queries",
+    "page_title",
+    "text_length",
+    "quality_score",
+    "quality_flags",
+    "sentence",
+]
+
 
 def build_sentence_candidate_dataframe(text_df: pd.DataFrame) -> pd.DataFrame:
     sentence_rows = []
@@ -33,5 +50,5 @@ def build_sentence_candidate_dataframe(text_df: pd.DataFrame) -> pd.DataFrame:
                 }
             )
 
-    sentence_df = pd.DataFrame(sentence_rows)
+    sentence_df = pd.DataFrame(sentence_rows, columns=SENTENCE_CANDIDATE_COLUMNS)
     return sentence_df
