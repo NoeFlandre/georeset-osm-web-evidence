@@ -4,6 +4,7 @@ import os
 import time
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 
 import pandas as pd
 import requests
@@ -11,7 +12,7 @@ import requests
 from georeset_osm_web_evidence.evidence.page_text import build_page_text_row
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     build_sentence_candidate_dataframe,
-    limit_sentence_candidates,
+    select_complete_sentence_candidates,
 )
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     add_pilot_metadata,
@@ -42,6 +43,7 @@ FETCH_URLS_PATH = OUTPUT_DIR / "candidate_urls_to_fetch.parquet"
 PAGE_TEXT_PATH = OUTPUT_DIR / "page_text.parquet"
 PAGE_TEXT_WITH_QUALITY_PATH = OUTPUT_DIR / "page_text_with_quality.parquet"
 SENTENCE_CANDIDATES_PATH = OUTPUT_DIR / "sentence_candidates.parquet"
+COMPLETE_POLYGONS_PATH = OUTPUT_DIR / "complete_sentence_polygons.parquet"
 ANALYSIS_PATH = OUTPUT_DIR / "analysis.json"
 LOG_PATH = OUTPUT_DIR / "run.log"
 RESET_OUTPUTS = os.environ.get("WORLDWIDE_SENTENCE_PILOT_RESET_OUTPUTS", "0") == "1"
@@ -54,6 +56,7 @@ OUTPUT_ARTIFACT_PATHS = [
     PAGE_TEXT_PATH,
     PAGE_TEXT_WITH_QUALITY_PATH,
     SENTENCE_CANDIDATES_PATH,
+    COMPLETE_POLYGONS_PATH,
     ANALYSIS_PATH,
 ]
 PILOT_REQUIRED_COLUMNS = [
@@ -63,13 +66,21 @@ PILOT_REQUIRED_COLUMNS = [
     "has_wikipedia_articles",
 ]
 
-SAMPLE_SIZE = int(os.environ.get("WORLDWIDE_SENTENCE_PILOT_SAMPLE_SIZE", "10"))
+TARGET_COMPLETE_POLYGON_COUNT = int(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_TARGET_COMPLETE_POLYGONS", "10")
+)
+SAMPLE_SIZE = int(
+    os.environ.get(
+        "WORLDWIDE_SENTENCE_PILOT_SAMPLE_SIZE",
+        str(TARGET_COMPLETE_POLYGON_COUNT * 4),
+    )
+)
 RESULTS_PER_QUERY = int(os.environ.get("WORLDWIDE_SENTENCE_PILOT_RESULTS_PER_QUERY", "5"))
 MAX_QUERIES_PER_POLYGON = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON", "4")
 )
 MAX_URLS_PER_POLYGON = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "3")
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "15")
 )
 MAX_SENTENCES_PER_POLYGON = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_POLYGON", "10")
@@ -82,6 +93,9 @@ SEARCH_DELAY_SECONDS = float(
 )
 FETCH_DELAY_SECONDS = float(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_DELAY_SECONDS", "1.0")
+)
+FETCH_TIMEOUT_SECONDS = int(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_TIMEOUT_SECONDS", "10")
 )
 PAGE_TEXT_COLUMNS = [
     "osm_type",
@@ -110,6 +124,25 @@ PAGE_TEXT_COLUMNS = [
     "area_size_bin",
     "polygon_category",
 ]
+
+
+def is_pdf_url(url: str) -> bool:
+    path = urlparse(url).path.lower()
+    return path.endswith(".pdf")
+
+
+def skipped_page_text_result(url: str, fetch_error: str) -> dict:
+    return {
+        "url": url,
+        "final_url": None,
+        "status_code": None,
+        "title": None,
+        "text": None,
+        "text_length": 0,
+        "fetch_error": fetch_error,
+        "extraction_method": None,
+        "extraction_error": None,
+    }
 
 
 def configure_logging() -> logging.Logger:
@@ -376,7 +409,12 @@ def fetch_candidate_pages(
     logger: logging.Logger,
     output_path: Path = PAGE_TEXT_PATH,
     reset: bool = False,
+    stop_when: Callable[[pd.DataFrame], bool] | None = None,
+    stop_check_interval: int = 10,
 ) -> tuple[pd.DataFrame, bool]:
+    if stop_check_interval <= 0:
+        raise ValueError("stop_check_interval must be positive")
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and not reset:
         page_text_df = pd.read_parquet(output_path)
@@ -387,6 +425,9 @@ def fetch_candidate_pages(
 
     changed = False
     fetched_urls = set(page_text_df["source_url"].dropna())
+    if stop_when is not None and stop_when(page_text_df):
+        logger.info("Page fetch quota is already satisfied from cached rows")
+        return page_text_df, changed
 
     for url_index, row in enumerate(candidate_urls_df.itertuples(), start=1):
         if row.url in fetched_urls:
@@ -398,8 +439,25 @@ def fetch_candidate_pages(
             )
             continue
 
-        logger.info("Fetching URL %s/%s: %s", url_index, len(candidate_urls_df), row.url)
-        page_text = fetch_page_text(row.url)
+        if is_pdf_url(row.url):
+            logger.info(
+                "Skipping PDF URL %s/%s: %s",
+                url_index,
+                len(candidate_urls_df),
+                row.url,
+            )
+            page_text = skipped_page_text_result(row.url, "Skipped PDF URL")
+        else:
+            logger.info(
+                "Fetching URL %s/%s: %s",
+                url_index,
+                len(candidate_urls_df),
+                row.url,
+            )
+            page_text = fetch_page_text(
+                row.url,
+                timeout_seconds=FETCH_TIMEOUT_SECONDS,
+            )
         page_row = build_page_text_row(row, page_text)
         page_row.update(
             {
@@ -412,13 +470,20 @@ def fetch_candidate_pages(
                 "polygon_category": row.polygon_category,
             }
         )
-        page_text_df = pd.concat(
-            [page_text_df, pd.DataFrame([page_row], columns=PAGE_TEXT_COLUMNS)],
-            ignore_index=True,
-        )
+        page_text_df.loc[len(page_text_df)] = [
+            page_row.get(column) for column in PAGE_TEXT_COLUMNS
+        ]
         page_text_df.to_parquet(output_path, index=False)
         fetched_urls.add(row.url)
         changed = True
+
+        if (
+            stop_when is not None
+            and len(page_text_df) % stop_check_interval == 0
+            and stop_when(page_text_df)
+        ):
+            logger.info("Stopping page fetch because sentence quota is satisfied")
+            break
 
         time.sleep(FETCH_DELAY_SECONDS)
 
@@ -441,10 +506,11 @@ def build_pilot_sentence_candidates(
 ) -> pd.DataFrame:
     sentence_df = build_sentence_candidate_dataframe(page_text_with_quality_df)
     sentence_df = enrich_sentence_metadata(sentence_df, pilot_gdf)
-    return limit_sentence_candidates(
+    return select_complete_sentence_candidates(
         sentence_df,
-        max_sentences_per_polygon=MAX_SENTENCES_PER_POLYGON,
-        max_sentences_per_url=MAX_SENTENCES_PER_URL,
+        sentences_per_polygon=MAX_SENTENCES_PER_POLYGON,
+        sentences_per_url=MAX_SENTENCES_PER_URL,
+        target_polygon_count=TARGET_COMPLETE_POLYGON_COUNT,
     )
 
 
@@ -453,7 +519,7 @@ def sentence_artifact_respects_sampling_limits(sentence_df: pd.DataFrame) -> boo
     if any(column not in sentence_df.columns for column in required_columns):
         return False
     if sentence_df.empty:
-        return True
+        return False
 
     per_url_counts = sentence_df.groupby(required_columns, dropna=False).size()
     per_polygon_counts = sentence_df.groupby(
@@ -463,7 +529,8 @@ def sentence_artifact_respects_sampling_limits(sentence_df: pd.DataFrame) -> boo
 
     return bool(
         per_url_counts.le(MAX_SENTENCES_PER_URL).all()
-        and per_polygon_counts.le(MAX_SENTENCES_PER_POLYGON).all()
+        and per_polygon_counts.eq(MAX_SENTENCES_PER_POLYGON).all()
+        and len(per_polygon_counts) == TARGET_COMPLETE_POLYGON_COUNT
     )
 
 
@@ -489,6 +556,45 @@ def load_or_build_sentence_candidates(
     return sentence_df
 
 
+def sentence_quota_is_satisfied(
+    page_text_df: pd.DataFrame,
+    pilot_gdf: pd.DataFrame,
+) -> bool:
+    if page_text_df.empty:
+        return False
+
+    page_text_with_quality_df = add_quality_metadata(page_text_df)
+    sentence_df = build_pilot_sentence_candidates(page_text_with_quality_df, pilot_gdf)
+    return sentence_artifact_respects_sampling_limits(sentence_df)
+
+
+def filter_to_sentence_polygons(df: pd.DataFrame, sentence_df: pd.DataFrame) -> pd.DataFrame:
+    key_columns = ["osm_type", "osm_id"]
+    if df.empty or sentence_df.empty:
+        return df.head(0).copy()
+    if any(column not in df.columns for column in key_columns):
+        return df.copy()
+
+    complete_keys_df = sentence_df[key_columns].drop_duplicates()
+    return df.merge(complete_keys_df, on=key_columns, how="inner")
+
+
+def save_complete_sentence_polygons(
+    sentence_df: pd.DataFrame,
+    pilot_gdf: pd.DataFrame,
+    logger: logging.Logger,
+) -> pd.DataFrame:
+    complete_pilot_gdf = filter_to_sentence_polygons(pilot_gdf, sentence_df)
+    save_geodataframe(complete_pilot_gdf, COMPLETE_POLYGONS_PATH)
+    logger.info(
+        "Saved %s complete sentence polygons to %s",
+        len(complete_pilot_gdf),
+        COMPLETE_POLYGONS_PATH,
+    )
+
+    return complete_pilot_gdf
+
+
 def write_analysis(
     analysis: dict,
     logger: logging.Logger,
@@ -508,13 +614,16 @@ def main() -> None:
     logger.info(
         "Pilot settings: sample_size=%s, results_per_query=%s, "
         "max_queries_per_polygon=%s, max_urls_per_polygon=%s, "
-        "max_sentences_per_polygon=%s, max_sentences_per_url=%s",
+        "target_complete_polygons=%s, max_sentences_per_polygon=%s, "
+        "max_sentences_per_url=%s, fetch_timeout_seconds=%s",
         SAMPLE_SIZE,
         RESULTS_PER_QUERY,
         MAX_QUERIES_PER_POLYGON,
         MAX_URLS_PER_POLYGON,
+        TARGET_COMPLETE_POLYGON_COUNT,
         MAX_SENTENCES_PER_POLYGON,
         MAX_SENTENCES_PER_URL,
+        FETCH_TIMEOUT_SECONDS,
     )
 
     source_gdf = load_geodataframe(INPUT_POLYGONS_PATH)
@@ -556,6 +665,7 @@ def main() -> None:
         logger,
         output_path=PAGE_TEXT_PATH,
         reset=page_text_reset,
+        stop_when=lambda dataframe: sentence_quota_is_satisfied(dataframe, pilot_gdf),
     )
     logger.info("Saved %s fetched page rows to %s", len(page_text_df), PAGE_TEXT_PATH)
 
@@ -575,13 +685,26 @@ def main() -> None:
         logger=logger,
         reset=text_metadata_reset,
     )
+    complete_pilot_gdf = save_complete_sentence_polygons(
+        sentence_df,
+        pilot_gdf,
+        logger,
+    )
 
     analysis = summarize_sentence_pilot(
-        polygons_df=pilot_gdf,
-        search_results_df=search_results_df,
-        candidate_urls_df=candidate_urls_df,
-        page_text_df=page_text_with_quality_df,
+        polygons_df=complete_pilot_gdf,
+        search_results_df=filter_to_sentence_polygons(search_results_df, sentence_df),
+        candidate_urls_df=filter_to_sentence_polygons(candidate_urls_df, sentence_df),
+        page_text_df=filter_to_sentence_polygons(page_text_with_quality_df, sentence_df),
         sentence_df=sentence_df,
+    )
+    analysis.update(
+        {
+            "searched_polygon_count": int(len(pilot_gdf)),
+            "target_complete_polygon_count": TARGET_COMPLETE_POLYGON_COUNT,
+            "sentences_per_polygon_target": MAX_SENTENCES_PER_POLYGON,
+            "sentences_per_url_target": MAX_SENTENCES_PER_URL,
+        }
     )
     write_analysis(analysis, logger)
     logger.info("Worldwide sentence pilot finished")

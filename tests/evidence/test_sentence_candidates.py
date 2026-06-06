@@ -6,6 +6,7 @@ from georeset_osm_web_evidence.evidence.sentence_candidates import (
     SENTENCE_CANDIDATE_COLUMNS,
     build_sentence_candidate_dataframe,
     limit_sentence_candidates,
+    select_complete_sentence_candidates,
 )
 
 
@@ -140,6 +141,43 @@ class TestEvidenceSentenceCandidate(unittest.TestCase):
         self.assertEqual(
             first_polygon_df["sentence"].to_list(),
             [f"Sentence {url_index}-0" for url_index in range(10)],
+        )
+
+    def test_selects_only_polygons_with_complete_sentence_quota(self):
+        sentence_rows = []
+        for url_index in range(12):
+            sentence_rows.append(
+                {
+                    "osm_type": "way",
+                    "osm_id": 123,
+                    "polygon_name": "Complete Forest",
+                    "url": f"https://complete.example/page-{url_index}",
+                    "sentence": f"Complete sentence {url_index}",
+                }
+            )
+        for url_index in range(9):
+            sentence_rows.append(
+                {
+                    "osm_type": "way",
+                    "osm_id": 456,
+                    "polygon_name": "Incomplete Forest",
+                    "url": f"https://incomplete.example/page-{url_index}",
+                    "sentence": f"Incomplete sentence {url_index}",
+                }
+            )
+        sentence_df = pd.DataFrame(sentence_rows)
+
+        complete_df = select_complete_sentence_candidates(
+            sentence_df,
+            sentences_per_polygon=10,
+            sentences_per_url=1,
+        )
+
+        self.assertEqual(len(complete_df), 10)
+        self.assertEqual(complete_df["polygon_name"].unique().tolist(), ["Complete Forest"])
+        self.assertEqual(
+            complete_df["sentence"].to_list(),
+            [f"Complete sentence {url_index}" for url_index in range(10)],
         )
 
 

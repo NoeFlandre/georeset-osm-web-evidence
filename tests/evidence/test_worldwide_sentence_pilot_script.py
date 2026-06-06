@@ -14,6 +14,7 @@ from scripts.evidence.run_worldwide_sentence_pilot import (
     load_or_collect_search_results,
     load_or_build_dataframe,
     pilot_artifact_is_usable,
+    sentence_artifact_respects_sampling_limits,
     search_attempts_cover_expected_queries,
 )
 
@@ -266,6 +267,21 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         )
         self.assertEqual(result["world_region"].to_list(), ["Europe"] * 10)
 
+    def test_sentence_artifact_must_reach_complete_target(self) -> None:
+        partial_sentence_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "url": f"https://example.org/page-{index}",
+                    "sentence": f"Sentence {index}",
+                }
+                for index in range(3)
+            ]
+        )
+
+        self.assertFalse(sentence_artifact_respects_sampling_limits(partial_sentence_df))
+
     def test_fetch_candidate_pages_reuses_existing_rows_and_checkpoints_new_rows(self) -> None:
         candidate_urls_df = pd.DataFrame(
             [
@@ -364,7 +380,10 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
 
             saved_df = pd.read_parquet(output_path)
 
-        fetch_page_text.assert_called_once_with("https://example.org/b")
+        fetch_page_text.assert_called_once_with(
+            "https://example.org/b",
+            timeout_seconds=10,
+        )
         self.assertTrue(changed)
         self.assertEqual(result["source_url"].to_list(), [
             "https://example.org/a",
@@ -374,6 +393,150 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
             "https://example.org/a",
             "https://example.org/b",
         ])
+
+    def test_fetch_candidate_pages_stops_when_quota_callback_is_satisfied(self) -> None:
+        candidate_urls_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "url": f"https://example.org/{index}",
+                    "title": f"Title {index}",
+                    "description": f"Desc {index}",
+                    "queries": [f"q{index}"],
+                    "best_rank": index,
+                    "world_region": "Europe",
+                    "country": "France",
+                    "local_language": "fr",
+                    "query_local_language": "fr",
+                    "area_size_bin": "medium",
+                    "polygon_category": "forest",
+                }
+                for index in range(3)
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "page_text.parquet"
+
+            def stop_when(page_text_df: pd.DataFrame) -> bool:
+                return len(page_text_df) >= 2
+
+            with patch(
+                "scripts.evidence.run_worldwide_sentence_pilot.fetch_page_text",
+                side_effect=lambda url, timeout_seconds: {
+                    "url": url,
+                    "final_url": url,
+                    "status_code": 200,
+                    "title": "Fetched",
+                    "text": "Fetched text.",
+                    "text_length": 13,
+                    "fetch_error": None,
+                    "extraction_method": "trafilatura",
+                    "extraction_error": None,
+                },
+            ) as fetch_page_text, patch(
+                "scripts.evidence.run_worldwide_sentence_pilot.time.sleep"
+            ):
+                result, changed = fetch_candidate_pages(
+                    candidate_urls_df,
+                    self._silent_logger("test_fetch_candidate_pages_early_stop"),
+                    output_path=output_path,
+                    reset=False,
+                    stop_when=stop_when,
+                    stop_check_interval=1,
+                )
+
+        self.assertTrue(changed)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(fetch_page_text.call_count, 2)
+
+    def test_fetch_candidate_pages_checkpoints_pdf_without_fetching_it(self) -> None:
+        candidate_urls_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "url": "https://example.org/report.pdf",
+                    "title": "PDF",
+                    "description": "PDF desc",
+                    "queries": ["q-pdf"],
+                    "best_rank": 1,
+                    "world_region": "Europe",
+                    "country": "France",
+                    "local_language": "fr",
+                    "query_local_language": "fr",
+                    "area_size_bin": "medium",
+                    "polygon_category": "forest",
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "url": "https://example.org/page",
+                    "title": "HTML",
+                    "description": "HTML desc",
+                    "queries": ["q-html"],
+                    "best_rank": 2,
+                    "world_region": "Europe",
+                    "country": "France",
+                    "local_language": "fr",
+                    "query_local_language": "fr",
+                    "area_size_bin": "medium",
+                    "polygon_category": "forest",
+                },
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "page_text.parquet"
+
+            with patch(
+                "scripts.evidence.run_worldwide_sentence_pilot.fetch_page_text",
+                return_value={
+                    "url": "https://example.org/page",
+                    "final_url": "https://example.org/page",
+                    "status_code": 200,
+                    "title": "HTML",
+                    "text": "New text.",
+                    "text_length": 9,
+                    "fetch_error": None,
+                    "extraction_method": "trafilatura",
+                    "extraction_error": None,
+                },
+            ) as fetch_page_text, patch(
+                "scripts.evidence.run_worldwide_sentence_pilot.time.sleep"
+            ):
+                result, changed = fetch_candidate_pages(
+                    candidate_urls_df,
+                    self._silent_logger("test_fetch_candidate_pages_pdf_skip"),
+                    output_path=output_path,
+                    reset=False,
+                )
+
+            saved_df = pd.read_parquet(output_path)
+
+        fetch_page_text.assert_called_once_with(
+            "https://example.org/page",
+            timeout_seconds=10,
+        )
+        self.assertTrue(changed)
+        self.assertEqual(result["source_url"].to_list(), [
+            "https://example.org/report.pdf",
+            "https://example.org/page",
+        ])
+        self.assertEqual(saved_df["source_url"].to_list(), result["source_url"].to_list())
+        pdf_row = result[result["source_url"] == "https://example.org/report.pdf"].iloc[0]
+        self.assertEqual(pdf_row["text_length"], 0)
+        self.assertEqual(pdf_row["fetch_error"], "Skipped PDF URL")
 
 
 if __name__ == "__main__":

@@ -82,3 +82,39 @@ def limit_sentence_candidates(
     ]
 
     return limited_df.reset_index(drop=True)
+
+
+def select_complete_sentence_candidates(
+    sentence_df: pd.DataFrame,
+    sentences_per_polygon: int,
+    sentences_per_url: int,
+    target_polygon_count: int | None = None,
+) -> pd.DataFrame:
+    if target_polygon_count is not None and target_polygon_count <= 0:
+        raise ValueError("target_polygon_count must be positive")
+
+    limited_df = limit_sentence_candidates(
+        sentence_df,
+        max_sentences_per_polygon=sentences_per_polygon,
+        max_sentences_per_url=sentences_per_url,
+    )
+    if limited_df.empty:
+        return limited_df
+
+    polygon_columns = ["osm_type", "osm_id"]
+    sentence_counts = limited_df.groupby(
+        polygon_columns,
+        dropna=False,
+    ).size()
+    complete_polygon_keys = sentence_counts[
+        sentence_counts == sentences_per_polygon
+    ].index
+    if target_polygon_count is not None:
+        complete_polygon_keys = complete_polygon_keys[:target_polygon_count]
+
+    complete_key_df = complete_polygon_keys.to_frame(index=False)
+    return limited_df.merge(
+        complete_key_df,
+        on=polygon_columns,
+        how="inner",
+    ).reset_index(drop=True)
