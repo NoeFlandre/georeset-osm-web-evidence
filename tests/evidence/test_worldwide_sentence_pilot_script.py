@@ -8,6 +8,7 @@ import pandas as pd
 import requests
 
 from scripts.evidence.run_worldwide_sentence_pilot import (
+    build_pilot_sentence_candidates,
     collect_search_results,
     fetch_candidate_pages,
     load_or_collect_search_results,
@@ -232,6 +233,38 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
 
         self.assertEqual(result["value"].to_list(), ["rebuilt"])
         self.assertEqual(saved_df["value"].to_list(), ["rebuilt"])
+
+    def test_build_pilot_sentence_candidates_applies_sampling_limits(self) -> None:
+        sentence_rows = []
+        for url_index in range(12):
+            for sentence_index in range(2):
+                sentence_rows.append(
+                    {
+                        "osm_type": "way",
+                        "osm_id": 1,
+                        "url": f"https://example.org/page-{url_index}",
+                        "sentence": f"Sentence {url_index}-{sentence_index}",
+                    }
+                )
+        raw_sentence_df = pd.DataFrame(sentence_rows)
+        pilot_df = self._pilot_dataframe()
+
+        with patch(
+            "scripts.evidence.run_worldwide_sentence_pilot.build_sentence_candidate_dataframe",
+            return_value=raw_sentence_df,
+        ):
+            result = build_pilot_sentence_candidates(
+                pd.DataFrame([{"text": "unused"}]),
+                pilot_df,
+            )
+
+        self.assertEqual(len(result), 10)
+        self.assertTrue(result.groupby(["osm_type", "osm_id", "url"]).size().eq(1).all())
+        self.assertEqual(
+            result["sentence"].to_list(),
+            [f"Sentence {url_index}-0" for url_index in range(10)],
+        )
+        self.assertEqual(result["world_region"].to_list(), ["Europe"] * 10)
 
     def test_fetch_candidate_pages_reuses_existing_rows_and_checkpoints_new_rows(self) -> None:
         candidate_urls_df = pd.DataFrame(

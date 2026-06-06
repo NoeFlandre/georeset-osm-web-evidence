@@ -5,6 +5,7 @@ import pandas as pd
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     SENTENCE_CANDIDATE_COLUMNS,
     build_sentence_candidate_dataframe,
+    limit_sentence_candidates,
 )
 
 
@@ -95,6 +96,51 @@ class TestEvidenceSentenceCandidate(unittest.TestCase):
 
         self.assertTrue(sentence_df.empty)
         self.assertEqual(sentence_df.columns.to_list(), SENTENCE_CANDIDATE_COLUMNS)
+
+    def test_limits_sentence_candidates_per_url_then_per_polygon(self):
+        sentence_rows = []
+        for url_index in range(12):
+            for sentence_index in range(2):
+                sentence_rows.append(
+                    {
+                        "osm_type": "way",
+                        "osm_id": 123,
+                        "polygon_name": "Forêt Test",
+                        "url": f"https://example.com/page-{url_index}",
+                        "sentence": f"Sentence {url_index}-{sentence_index}",
+                    }
+                )
+        for url_index in range(3):
+            for sentence_index in range(2):
+                sentence_rows.append(
+                    {
+                        "osm_type": "relation",
+                        "osm_id": 456,
+                        "polygon_name": "Wetland Test",
+                        "url": f"https://example.org/page-{url_index}",
+                        "sentence": f"Wetland sentence {url_index}-{sentence_index}",
+                    }
+                )
+        sentence_df = pd.DataFrame(sentence_rows)
+
+        limited_df = limit_sentence_candidates(
+            sentence_df,
+            max_sentences_per_polygon=10,
+            max_sentences_per_url=1,
+        )
+
+        first_polygon_df = limited_df[limited_df["osm_id"] == 123]
+        second_polygon_df = limited_df[limited_df["osm_id"] == 456]
+
+        self.assertEqual(len(first_polygon_df), 10)
+        self.assertEqual(len(second_polygon_df), 3)
+        self.assertTrue(
+            limited_df.groupby(["osm_type", "osm_id", "url"]).size().le(1).all()
+        )
+        self.assertEqual(
+            first_polygon_df["sentence"].to_list(),
+            [f"Sentence {url_index}-0" for url_index in range(10)],
+        )
 
 
 if __name__ == "__main__":

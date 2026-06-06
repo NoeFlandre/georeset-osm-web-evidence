@@ -11,6 +11,7 @@ import requests
 from georeset_osm_web_evidence.evidence.page_text import build_page_text_row
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     build_sentence_candidate_dataframe,
+    limit_sentence_candidates,
 )
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     add_pilot_metadata,
@@ -69,6 +70,12 @@ MAX_QUERIES_PER_POLYGON = int(
 )
 MAX_URLS_PER_POLYGON = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "3")
+)
+MAX_SENTENCES_PER_POLYGON = int(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_POLYGON", "10")
+)
+MAX_SENTENCES_PER_URL = int(
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_URL", "1")
 )
 SEARCH_DELAY_SECONDS = float(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_SEARCH_DELAY_SECONDS", "1.2")
@@ -428,6 +435,60 @@ def enrich_sentence_metadata(
     return attach_polygon_metadata(sentence_df, pilot_gdf)
 
 
+def build_pilot_sentence_candidates(
+    page_text_with_quality_df: pd.DataFrame,
+    pilot_gdf: pd.DataFrame,
+) -> pd.DataFrame:
+    sentence_df = build_sentence_candidate_dataframe(page_text_with_quality_df)
+    sentence_df = enrich_sentence_metadata(sentence_df, pilot_gdf)
+    return limit_sentence_candidates(
+        sentence_df,
+        max_sentences_per_polygon=MAX_SENTENCES_PER_POLYGON,
+        max_sentences_per_url=MAX_SENTENCES_PER_URL,
+    )
+
+
+def sentence_artifact_respects_sampling_limits(sentence_df: pd.DataFrame) -> bool:
+    required_columns = ["osm_type", "osm_id", "url"]
+    if any(column not in sentence_df.columns for column in required_columns):
+        return False
+    if sentence_df.empty:
+        return True
+
+    per_url_counts = sentence_df.groupby(required_columns, dropna=False).size()
+    per_polygon_counts = sentence_df.groupby(
+        ["osm_type", "osm_id"],
+        dropna=False,
+    ).size()
+
+    return bool(
+        per_url_counts.le(MAX_SENTENCES_PER_URL).all()
+        and per_polygon_counts.le(MAX_SENTENCES_PER_POLYGON).all()
+    )
+
+
+def load_or_build_sentence_candidates(
+    path: Path,
+    page_text_with_quality_df: pd.DataFrame,
+    pilot_gdf: pd.DataFrame,
+    logger: logging.Logger,
+    reset: bool,
+) -> pd.DataFrame:
+    if path.exists() and not reset:
+        sentence_df = pd.read_parquet(path)
+        if sentence_artifact_respects_sampling_limits(sentence_df):
+            logger.info("Loaded %s rows for sentence candidates from %s", len(sentence_df), path)
+            return sentence_df
+
+        logger.info("Rebuilding sentence candidates because sampling limits changed")
+
+    sentence_df = build_pilot_sentence_candidates(page_text_with_quality_df, pilot_gdf)
+    sentence_df.to_parquet(path, index=False)
+    logger.info("Saved %s rows for sentence candidates to %s", len(sentence_df), path)
+
+    return sentence_df
+
+
 def write_analysis(
     analysis: dict,
     logger: logging.Logger,
@@ -446,11 +507,14 @@ def main() -> None:
     logger.info("Output directory: %s", OUTPUT_DIR)
     logger.info(
         "Pilot settings: sample_size=%s, results_per_query=%s, "
-        "max_queries_per_polygon=%s, max_urls_per_polygon=%s",
+        "max_queries_per_polygon=%s, max_urls_per_polygon=%s, "
+        "max_sentences_per_polygon=%s, max_sentences_per_url=%s",
         SAMPLE_SIZE,
         RESULTS_PER_QUERY,
         MAX_QUERIES_PER_POLYGON,
         MAX_URLS_PER_POLYGON,
+        MAX_SENTENCES_PER_POLYGON,
+        MAX_SENTENCES_PER_URL,
     )
 
     source_gdf = load_geodataframe(INPUT_POLYGONS_PATH)
@@ -504,14 +568,11 @@ def main() -> None:
         reset=text_metadata_reset,
     )
 
-    sentence_df = load_or_build_dataframe(
+    sentence_df = load_or_build_sentence_candidates(
         path=SENTENCE_CANDIDATES_PATH,
-        stage_name="sentence candidates",
+        page_text_with_quality_df=page_text_with_quality_df,
+        pilot_gdf=pilot_gdf,
         logger=logger,
-        build=lambda: enrich_sentence_metadata(
-            build_sentence_candidate_dataframe(page_text_with_quality_df),
-            pilot_gdf,
-        ),
         reset=text_metadata_reset,
     )
 
