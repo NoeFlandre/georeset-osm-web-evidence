@@ -2,7 +2,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from georeset_osm_web_evidence.review.artifacts import write_review_artifacts
+from georeset_osm_web_evidence.review.artifacts import (
+    format_review_artifact_summary,
+    write_review_artifacts,
+)
 from georeset_osm_web_evidence.review.sentence_labels import (
     build_sentence_label_review_dataframe,
     save_sentence_label_review_xlsx,
@@ -47,8 +50,13 @@ def run_context_query_sentence_review_build(
 def main() -> None:
     review_df = run_context_query_sentence_review_build()
 
-    print(f"Saved {len(review_df)} review rows to {DEFAULT_CSV_OUTPUT_PATH}")
-    print(f"Saved reviewer workbook to {DEFAULT_XLSX_OUTPUT_PATH}")
+    print(
+        format_review_artifact_summary(
+            review_df,
+            DEFAULT_CSV_OUTPUT_PATH,
+            DEFAULT_XLSX_OUTPUT_PATH,
+        )
+    )
     print(review_df[["review_id", "human_label", "llm_label", "polygon_name"]])
 
 

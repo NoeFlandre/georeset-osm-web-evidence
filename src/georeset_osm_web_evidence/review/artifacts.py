@@ -4,6 +4,17 @@ from pathlib import Path
 import pandas as pd
 
 
+def format_review_artifact_summary(
+    review_df: pd.DataFrame,
+    csv_output_path: str | Path,
+    xlsx_output_path: str | Path,
+) -> str:
+    return (
+        f"Saved {len(review_df)} review rows to {Path(csv_output_path)}\n"
+        f"Saved reviewer workbook to {Path(xlsx_output_path)}"
+    )
+
+
 def write_review_artifacts(
     review_df: pd.DataFrame,
     csv_output_path: str | Path,

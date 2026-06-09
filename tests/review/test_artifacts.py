@@ -5,7 +5,10 @@ from tempfile import TemporaryDirectory
 import pandas as pd
 from openpyxl import load_workbook
 
-from georeset_osm_web_evidence.review.artifacts import write_review_artifacts
+from georeset_osm_web_evidence.review.artifacts import (
+    format_review_artifact_summary,
+    write_review_artifacts,
+)
 
 
 class ReviewArtifactTests(unittest.TestCase):
@@ -42,6 +45,21 @@ class ReviewArtifactTests(unittest.TestCase):
         self.assertIs(result_df, review_df)
         self.assertEqual(saved_csv_df.loc[0, "review_id"], "review-0001")
         self.assertEqual(workbook["review"]["A1"].value, "review_id")
+
+    def test_formats_review_artifact_summary(self):
+        review_df = pd.DataFrame([{"review_id": "review-0001"}])
+
+        summary = format_review_artifact_summary(
+            review_df,
+            csv_output_path=Path("review.csv"),
+            xlsx_output_path=Path("review.xlsx"),
+        )
+
+        self.assertEqual(
+            summary,
+            "Saved 1 review rows to review.csv\n"
+            "Saved reviewer workbook to review.xlsx",
+        )
 
 
 if __name__ == "__main__":

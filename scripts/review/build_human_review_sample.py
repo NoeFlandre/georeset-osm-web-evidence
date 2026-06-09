@@ -2,7 +2,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from georeset_osm_web_evidence.review.artifacts import write_review_artifacts
+from georeset_osm_web_evidence.review.artifacts import (
+    format_review_artifact_summary,
+    write_review_artifacts,
+)
 from georeset_osm_web_evidence.review.human import (
     build_human_review_dataframe,
     save_human_review_xlsx,
@@ -24,8 +27,7 @@ def main() -> None:
         workbook_writer=save_human_review_xlsx,
     )
 
-    print(f"Saved {len(review_df)} review rows to {csv_output_path}")
-    print(f"Saved reviewer workbook to {xlsx_output_path}")
+    print(format_review_artifact_summary(review_df, csv_output_path, xlsx_output_path))
     print(review_df[["review_id", "human_label", "fetch_status", "polygon_name"]])
 
 
