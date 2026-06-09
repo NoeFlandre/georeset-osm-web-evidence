@@ -3,8 +3,8 @@ from pathlib import Path
 import pandas as pd
 
 from georeset_osm_web_evidence.labeling.requests import (
+    build_and_write_labeling_prompt_artifacts,
     build_labeling_prompt_rows,
-    write_labeling_prompt_jsonl,
 )
 
 DEFAULT_INPUT_PATH = Path("data/processed/evidence/labeling_candidates.parquet")
@@ -22,18 +22,15 @@ def run_labeling_prompt_sample_build(
     jsonl_output_path: str | Path = DEFAULT_JSONL_OUTPUT_PATH,
     sample_size: int = 20,
 ) -> pd.DataFrame:
-    input_path = Path(input_path)
-    parquet_output_path = Path(parquet_output_path)
-    jsonl_output_path = Path(jsonl_output_path)
-
-    labeling_df = pd.read_parquet(input_path)
-    prompt_df = build_labeling_prompt_rows(labeling_df, limit=sample_size)
-
-    parquet_output_path.parent.mkdir(parents=True, exist_ok=True)
-    prompt_df.to_parquet(parquet_output_path, index=False)
-    write_labeling_prompt_jsonl(prompt_df, jsonl_output_path)
-
-    return prompt_df
+    return build_and_write_labeling_prompt_artifacts(
+        input_path=input_path,
+        parquet_output_path=parquet_output_path,
+        jsonl_output_path=jsonl_output_path,
+        prompt_builder=lambda labeling_df: build_labeling_prompt_rows(
+            labeling_df,
+            limit=sample_size,
+        ),
+    )
 
 
 def main() -> None:

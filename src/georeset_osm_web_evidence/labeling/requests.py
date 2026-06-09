@@ -1,5 +1,6 @@
 import json
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -137,3 +138,22 @@ def write_labeling_prompt_jsonl(
                 "prompt": row["prompt"],
             }
             file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def build_and_write_labeling_prompt_artifacts(
+    input_path: str | Path,
+    parquet_output_path: str | Path,
+    jsonl_output_path: str | Path,
+    prompt_builder: Callable[[pd.DataFrame], pd.DataFrame],
+) -> pd.DataFrame:
+    input_path = Path(input_path)
+    parquet_output_path = Path(parquet_output_path)
+
+    source_df = pd.read_parquet(input_path)
+    prompt_df = prompt_builder(source_df)
+
+    parquet_output_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_df.to_parquet(parquet_output_path, index=False)
+    write_labeling_prompt_jsonl(prompt_df, jsonl_output_path)
+
+    return prompt_df

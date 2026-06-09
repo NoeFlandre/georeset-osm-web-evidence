@@ -13,6 +13,7 @@ from georeset_osm_web_evidence.labeling.prompt import (
     build_binary_label_prompt,
 )
 from georeset_osm_web_evidence.labeling.requests import (
+    build_and_write_labeling_prompt_artifacts,
     build_location_aware_sentence_candidate_prompt_rows,
     build_sentence_candidate_prompt_rows,
     build_labeling_prompt_rows,
@@ -278,6 +279,53 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
         self.assertEqual(len(jsonl_rows), 1)
         self.assertEqual(saved_df.loc[0, "model_input"], sentence_df.loc[0, "sentence"])
         self.assertEqual(saved_df.loc[0, "llm_label"], None)
+
+    def test_builds_and_writes_prompt_artifacts_with_supplied_builder(self):
+        source_df = pd.DataFrame(
+            [
+                {
+                    "sentence_id": "s1",
+                    "model_input": "This wetland contains reed beds.",
+                    "polygon_name": "Marais Alpha",
+                },
+                {
+                    "sentence_id": "s2",
+                    "model_input": "This forest has dense canopy cover.",
+                    "polygon_name": "Bois Beta",
+                },
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            input_path = temp_path / "input" / "labeling_candidates.parquet"
+            parquet_output_path = temp_path / "requests" / "llm_requests.parquet"
+            jsonl_output_path = temp_path / "requests" / "llm_requests.jsonl"
+            input_path.parent.mkdir(parents=True)
+            source_df.to_parquet(input_path, index=False)
+
+            prompt_df = build_and_write_labeling_prompt_artifacts(
+                input_path=input_path,
+                parquet_output_path=parquet_output_path,
+                jsonl_output_path=jsonl_output_path,
+                prompt_builder=lambda dataframe: build_labeling_prompt_rows(
+                    dataframe,
+                    limit=1,
+                ),
+            )
+
+            saved_df = pd.read_parquet(parquet_output_path)
+            jsonl_rows = [
+                json.loads(line)
+                for line in jsonl_output_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        self.assertEqual(len(prompt_df), 1)
+        self.assertEqual(len(saved_df), 1)
+        self.assertEqual(len(jsonl_rows), 1)
+        self.assertEqual(prompt_df.loc[0, "sentence_id"], "s1")
+        self.assertEqual(saved_df.loc[0, "sentence_id"], "s1")
+        self.assertEqual(jsonl_rows[0]["sentence_id"], "s1")
 
 
 if __name__ == "__main__":
