@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
+import scripts.evidence.sample_sentence_candidates as sample_sentence_script
 from scripts.evidence.sample_sentence_candidates import run_sentence_candidate_sampling
 
 
@@ -54,6 +55,48 @@ class TestSampleSentenceCandidatesScript(unittest.TestCase):
         self.assertEqual(len(sampled_df), 2)
         self.assertEqual(len(saved_df), 2)
         self.assertEqual(sampled_df["sentence"].to_list(), saved_df["sentence"].to_list())
+
+    def test_formats_sampling_summary(self):
+        sampled_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "has_wikipedia_articles": True,
+                    "quality_score": 1.0,
+                },
+                {
+                    "osm_type": "relation",
+                    "osm_id": 2,
+                    "has_wikipedia_articles": False,
+                    "quality_score": 0.8,
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "has_wikipedia_articles": True,
+                    "quality_score": 0.9,
+                },
+            ]
+        )
+
+        self.assertTrue(hasattr(sample_sentence_script, "format_sampling_summary"))
+        summary = sample_sentence_script.format_sampling_summary(
+            sampled_df,
+            Path("out") / "sample.parquet",
+        )
+
+        self.assertEqual(
+            summary,
+            "Saved 3 sampled sentences to out/sample.parquet\n"
+            "Covered 2 polygons\n"
+            "Wikipedia coverage:\n"
+            "has_wikipedia_articles\n"
+            "True     2\n"
+            "False    1\n"
+            "Name: count, dtype: int64\n"
+            "Mean quality score: 0.900",
+        )
 
 
 if __name__ == "__main__":

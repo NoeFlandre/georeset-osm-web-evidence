@@ -5,6 +5,7 @@ import pandas as pd
 from georeset_osm_web_evidence.evidence.sample_sentence_candidates import (
     sample_sentence_candidates,
 )
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 
 DEFAULT_INPUT_PATH = Path("data/processed/evidence/sentence_candidates.parquet")
 DEFAULT_OUTPUT_PATH = Path(
@@ -30,25 +31,36 @@ def run_sentence_candidate_sampling(
         random_state=random_state,
     ).reset_index(drop=True)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    sampled_df.to_parquet(output_path, index=False)
+    write_dataframe_artifact(sampled_df, output_path)
 
     return sampled_df
 
 
-def print_sampling_summary(sampled_df: pd.DataFrame, output_path: Path) -> None:
-    print(f"Saved {len(sampled_df)} sampled sentences to {output_path}")
+def format_sampling_summary(
+    sampled_df: pd.DataFrame,
+    output_path: str | Path,
+) -> str:
+    lines = [f"Saved {len(sampled_df)} sampled sentences to {Path(output_path)}"]
 
     if {"osm_type", "osm_id"}.issubset(sampled_df.columns):
         polygon_count = sampled_df[["osm_type", "osm_id"]].drop_duplicates().shape[0]
-        print(f"Covered {polygon_count} polygons")
+        lines.append(f"Covered {polygon_count} polygons")
 
     if "has_wikipedia_articles" in sampled_df.columns:
-        print("Wikipedia coverage:")
-        print(sampled_df["has_wikipedia_articles"].value_counts(dropna=False))
+        wikipedia_coverage = sampled_df["has_wikipedia_articles"].value_counts(
+            dropna=False
+        )
+        lines.append("Wikipedia coverage:")
+        lines.append(str(wikipedia_coverage))
 
     if "quality_score" in sampled_df.columns and not sampled_df.empty:
-        print(f"Mean quality score: {sampled_df['quality_score'].mean():.3f}")
+        lines.append(f"Mean quality score: {sampled_df['quality_score'].mean():.3f}")
+
+    return "\n".join(lines)
+
+
+def print_sampling_summary(sampled_df: pd.DataFrame, output_path: Path) -> None:
+    print(format_sampling_summary(sampled_df, output_path))
 
 
 def main() -> None:
