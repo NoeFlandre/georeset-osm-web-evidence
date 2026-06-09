@@ -281,6 +281,18 @@ def collect_search_results(
     return pd.DataFrame(result_rows), pd.DataFrame(attempt_rows)
 
 
+def write_search_artifacts(
+    search_results_df: pd.DataFrame,
+    search_attempts_df: pd.DataFrame,
+    search_results_path: Path,
+    search_attempts_path: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return (
+        write_dataframe_artifact(search_results_df, search_results_path),
+        write_dataframe_artifact(search_attempts_df, search_attempts_path),
+    )
+
+
 def load_or_collect_search_results(
     pilot_gdf: pd.DataFrame,
     logger: logging.Logger,
@@ -300,8 +312,12 @@ def load_or_collect_search_results(
         logger.info("Rebuilding search artifacts because query coverage is incomplete")
 
     search_results_df, search_attempts_df = collect_search_results(pilot_gdf, logger)
-    search_results_df.to_parquet(SEARCH_RESULTS_PATH, index=False)
-    search_attempts_df.to_parquet(SEARCH_ATTEMPTS_PATH, index=False)
+    write_search_artifacts(
+        search_results_df,
+        search_attempts_df,
+        SEARCH_RESULTS_PATH,
+        SEARCH_ATTEMPTS_PATH,
+    )
     logger.info(
         "Saved %s search results to %s",
         len(search_results_df),

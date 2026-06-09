@@ -183,6 +183,53 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         self.assertEqual(saved_candidate_urls_df.index.to_list(), [0])
         self.assertEqual(saved_fetch_urls_df.index.to_list(), [0])
 
+    def test_write_search_artifacts_writes_related_dataframes_without_indexes(
+        self,
+    ) -> None:
+        self.assertTrue(hasattr(pilot_script, "write_search_artifacts"))
+
+        search_results_df = pd.DataFrame(
+            [{"url": "https://example.org/result", "rank": 1}],
+            index=[42],
+        )
+        search_attempts_df = pd.DataFrame(
+            [{"query": '"Forest A" forest', "result_count": 1}],
+            index=[99],
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            search_results_path = (
+                Path(temporary_directory) / "nested" / "search_results.parquet"
+            )
+            search_attempts_path = (
+                Path(temporary_directory) / "nested" / "search_attempts.parquet"
+            )
+
+            result_search_results_df, result_search_attempts_df = (
+                pilot_script.write_search_artifacts(
+                    search_results_df,
+                    search_attempts_df,
+                    search_results_path,
+                    search_attempts_path,
+                )
+            )
+
+            saved_search_results_df = pd.read_parquet(search_results_path)
+            saved_search_attempts_df = pd.read_parquet(search_attempts_path)
+
+        self.assertIs(result_search_results_df, search_results_df)
+        self.assertIs(result_search_attempts_df, search_attempts_df)
+        self.assertEqual(
+            saved_search_results_df.to_dict("records"),
+            search_results_df.to_dict("records"),
+        )
+        self.assertEqual(
+            saved_search_attempts_df.to_dict("records"),
+            search_attempts_df.to_dict("records"),
+        )
+        self.assertEqual(saved_search_results_df.index.to_list(), [0])
+        self.assertEqual(saved_search_attempts_df.index.to_list(), [0])
+
     def test_load_or_collect_search_results_reports_when_it_rebuilds(self) -> None:
         pilot_df = self._pilot_dataframe()
 
