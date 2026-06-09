@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 
+import georeset_osm_web_evidence.evidence.page_text as page_text_module
 from georeset_osm_web_evidence.evidence.page_text import (
     PAGE_TEXT_COLUMNS,
     backfill_cached_page_text_metadata,
@@ -129,6 +130,35 @@ class TestEvidencePageText(unittest.TestCase):
         self.assertFalse(page_text_quality_artifact_is_usable(missing_quality_df))
         self.assertFalse(page_text_quality_artifact_is_usable(missing_language_df))
         self.assertFalse(page_text_quality_artifact_is_usable(usable_df.head(0)))
+
+    def test_writes_page_text_artifact_with_canonical_columns(self):
+        page_text_df = pd.DataFrame(
+            [
+                {
+                    "source_url": "https://example.org/page",
+                    "url": "https://example.org/page",
+                    "polygon_name": "Forest A",
+                }
+            ],
+            index=[12],
+        )
+        original_columns = page_text_df.columns.to_list()
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "nested" / "page_text.parquet"
+
+            self.assertTrue(hasattr(page_text_module, "write_page_text_artifact"))
+            result = page_text_module.write_page_text_artifact(
+                page_text_df,
+                output_path,
+            )
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(page_text_df.columns.to_list(), original_columns)
+        self.assertEqual(result.columns.to_list(), PAGE_TEXT_COLUMNS)
+        self.assertEqual(saved_df.columns.to_list(), PAGE_TEXT_COLUMNS)
+        self.assertEqual(saved_df.loc[0, "source_url"], "https://example.org/page")
+        self.assertNotIn("index", saved_df.columns)
 
     def test_fetch_candidate_pages_checkpoint_new_rows(self):
         candidate_urls_df = pd.DataFrame(

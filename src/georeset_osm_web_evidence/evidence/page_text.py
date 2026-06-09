@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 from georeset_osm_web_evidence.web.text import fetch_page_text
 
 
@@ -148,6 +149,19 @@ def skipped_page_text_result(url: str, fetch_error: str) -> dict:
     }
 
 
+def write_page_text_artifact(
+    page_text_df: pd.DataFrame,
+    output_path: str | Path,
+) -> pd.DataFrame:
+    artifact_df = page_text_df.copy()
+    for column in PAGE_TEXT_COLUMNS:
+        if column not in artifact_df.columns:
+            artifact_df[column] = pd.NA
+
+    artifact_df = artifact_df[PAGE_TEXT_COLUMNS]
+    return write_dataframe_artifact(artifact_df, output_path)
+
+
 def fetch_candidate_pages(
     candidate_urls_df: pd.DataFrame,
     logger: logging.Logger | None,
@@ -163,7 +177,6 @@ def fetch_candidate_pages(
     if stop_check_interval <= 0:
         raise ValueError("stop_check_interval must be positive")
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and not reset:
         page_text_df = pd.read_parquet(output_path)
         if "source_url" not in page_text_df.columns:
@@ -189,7 +202,7 @@ def fetch_candidate_pages(
     )
     changed = changed or metadata_changed
     if changed:
-        page_text_df.to_parquet(output_path, index=False)
+        write_page_text_artifact(page_text_df, output_path)
 
     fetched_urls = set(page_text_df["source_url"].dropna())
     if stop_when is not None and stop_when(page_text_df):
@@ -246,7 +259,7 @@ def fetch_candidate_pages(
         page_text_df.loc[len(page_text_df)] = [
             page_row.get(column) for column in PAGE_TEXT_COLUMNS
         ]
-        page_text_df.to_parquet(output_path, index=False)
+        write_page_text_artifact(page_text_df, output_path)
         fetched_urls.add(row.url)
         changed = True
 
