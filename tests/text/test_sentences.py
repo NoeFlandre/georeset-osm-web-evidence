@@ -37,13 +37,31 @@ class TestSentences(unittest.TestCase):
         )
 
     def test_sentence_candidate_word_count_boundaries_are_inclusive(self):
-        eight_words = "one two three four five six seven eight"
-        eighty_words = " ".join(f"word{i}" for i in range(80))
-        eighty_one_words = " ".join(f"word{i}" for i in range(81))
+        eight_words = "one two three four five six seven eight."
+        eighty_words = " ".join(f"word{i}" for i in range(79)) + " final."
+        eighty_one_words = " ".join(f"word{i}" for i in range(80)) + " final."
 
         self.assertTrue(is_sentence_candidate(eight_words))
         self.assertTrue(is_sentence_candidate(eighty_words))
         self.assertFalse(is_sentence_candidate(eighty_one_words))
+
+    def test_rejects_sentence_without_terminal_punctuation(self):
+        sentence = "This sentence has enough words but does not end cleanly"
+
+        self.assertFalse(is_sentence_candidate(sentence))
+
+    def test_rejects_sentence_ending_with_ellipsis(self):
+        sentence = "This sentence trails off and should not be selected..."
+
+        self.assertFalse(is_sentence_candidate(sentence))
+
+    def test_rejects_symbol_heavy_sentence(self):
+        sentence = (
+            "Forest ### reserve ### wetland ### habitat ### area ### map ### "
+            "site ### today ###."
+        )
+
+        self.assertFalse(is_sentence_candidate(sentence))
 
     def test_extracts_candidate_sentences(self):
         text = """

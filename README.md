@@ -5,6 +5,8 @@
 
 Additional repository diagrams are available in [docs/diagrams.md](docs/diagrams.md).
 
+Grid'5000 LLM inference notes are available in [docs/grid5000_llm_inference_guide.md](docs/grid5000_llm_inference_guide.md).
+
 This project builds a pipeline for collecting web evidence linked to named
 environmental and agricultural OpenStreetMap (OSM) polygons. The codebase can:
 

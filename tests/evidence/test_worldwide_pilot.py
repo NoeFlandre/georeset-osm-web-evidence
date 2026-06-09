@@ -9,6 +9,9 @@ from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     build_search_rows_for_query,
     build_candidate_urls,
     build_limited_localized_queries,
+    candidate_url_artifact_is_usable,
+    fetch_url_artifact_matches_candidate_limit,
+    filter_to_sentence_polygons,
     query_languages_for_local_language,
     select_stratified_pilot_polygons,
     summarize_sentence_pilot,
@@ -129,6 +132,97 @@ class WorldwidePilotTests(unittest.TestCase):
         )
         self.assertEqual(candidate_urls["best_rank"].to_list(), [1, 2])
 
+    def test_build_candidate_urls_keeps_query_language_metadata(self) -> None:
+        search_results_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "query": '"Forest A" forêt',
+                    "query_language": "fr",
+                    "rank": 2,
+                    "title": "Result",
+                    "url": "https://example.org/a",
+                    "description": "French query result",
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "query": '"Forest A" forest',
+                    "query_language": "en",
+                    "rank": 1,
+                    "title": "Result",
+                    "url": "https://example.org/a",
+                    "description": "English query result",
+                },
+            ]
+        )
+
+        candidate_urls = build_candidate_urls(search_results_df)
+
+        self.assertEqual(candidate_urls.loc[0, "query_language"], "en")
+        self.assertEqual(candidate_urls.loc[0, "query_languages"], ["en", "fr"])
+
+    def test_candidate_url_artifact_requires_query_language_metadata(self) -> None:
+        usable_candidate_urls = pd.DataFrame(
+            [
+                {
+                    "url": "https://example.org/a",
+                    "queries": ["query one"],
+                    "query_language": "en",
+                    "query_languages": ["en"],
+                }
+            ]
+        )
+        stale_candidate_urls = pd.DataFrame(
+            [
+                {
+                    "url": "https://example.org/a",
+                    "queries": ["query one"],
+                }
+            ]
+        )
+
+        self.assertTrue(candidate_url_artifact_is_usable(usable_candidate_urls))
+        self.assertFalse(candidate_url_artifact_is_usable(stale_candidate_urls))
+
+    def test_fetch_url_artifact_matches_candidate_limit(self) -> None:
+        candidate_urls = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "url": f"https://example.org/{index}",
+                    "best_rank": index,
+                }
+                for index in range(4)
+            ]
+        )
+
+        matching_fetch_urls = candidate_urls.head(3).copy()
+        stale_fetch_urls = candidate_urls.head(2).copy()
+
+        self.assertTrue(
+            fetch_url_artifact_matches_candidate_limit(
+                candidate_urls,
+                matching_fetch_urls,
+                max_urls_per_polygon=3,
+            )
+        )
+        self.assertFalse(
+            fetch_url_artifact_matches_candidate_limit(
+                candidate_urls,
+                stale_fetch_urls,
+                max_urls_per_polygon=3,
+            )
+        )
+
     def test_build_search_rows_for_query_adds_query_and_polygon_metadata(self) -> None:
         Row = namedtuple(
             "Row",
@@ -218,6 +312,31 @@ class WorldwidePilotTests(unittest.TestCase):
         self.assertNotIn("world_region_y", result.columns)
         self.assertNotIn("query_local_language_x", result.columns)
         self.assertNotIn("query_local_language_y", result.columns)
+
+    def test_filters_rows_to_polygons_with_sentence_candidates(self) -> None:
+        rows_df = pd.DataFrame(
+            [
+                {"osm_type": "way", "osm_id": 1, "url": "https://example.org/a"},
+                {"osm_type": "way", "osm_id": 2, "url": "https://example.org/b"},
+                {"osm_type": "relation", "osm_id": 3, "url": "https://example.org/c"},
+            ]
+        )
+        sentence_df = pd.DataFrame(
+            [
+                {"osm_type": "way", "osm_id": 1, "sentence": "Sentence A."},
+                {"osm_type": "relation", "osm_id": 3, "sentence": "Sentence C."},
+            ]
+        )
+
+        result = filter_to_sentence_polygons(rows_df, sentence_df)
+
+        self.assertEqual(
+            result[["osm_type", "osm_id", "url"]].to_dict("records"),
+            [
+                {"osm_type": "way", "osm_id": 1, "url": "https://example.org/a"},
+                {"osm_type": "relation", "osm_id": 3, "url": "https://example.org/c"},
+            ],
+        )
 
     def test_summarizes_sentence_pilot_outputs(self) -> None:
         polygons_df = pd.DataFrame({"osm_id": [1, 2, 3]})

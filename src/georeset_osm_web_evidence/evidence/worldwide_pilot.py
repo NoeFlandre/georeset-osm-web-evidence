@@ -193,7 +193,24 @@ def build_candidate_urls(
                 "title",
                 "description",
                 "queries",
+                "query_language",
+                "query_languages",
             ]
+        )
+
+    aggregation = {
+        "best_rank": ("rank", "min"),
+        "title": ("title", "first"),
+        "description": ("description", "first"),
+        "queries": ("query", _combine_unique_strings),
+    }
+    has_query_language = "query_language" in search_results_df.columns
+    if has_query_language:
+        aggregation.update(
+            {
+                "query_language": ("query_language", "first"),
+                "query_languages": ("query_language", _combine_unique_strings),
+            }
         )
 
     candidate_urls_df = (
@@ -210,15 +227,15 @@ def build_candidate_urls(
             as_index=False,
             dropna=False,
         )
-        .agg(
-            best_rank=("rank", "min"),
-            title=("title", "first"),
-            description=("description", "first"),
-            queries=("query", _combine_unique_strings),
-        )
+        .agg(**aggregation)
         .sort_values(["osm_type", "osm_id", "best_rank", "url"])
         .reset_index(drop=True)
     )
+    if not has_query_language:
+        candidate_urls_df["query_language"] = pd.NA
+        candidate_urls_df["query_languages"] = [
+            [] for _ in range(len(candidate_urls_df))
+        ]
 
     if max_urls_per_polygon is not None:
         candidate_urls_df = (
@@ -228,6 +245,49 @@ def build_candidate_urls(
         )
 
     return candidate_urls_df
+
+
+def candidate_url_artifact_is_usable(candidate_urls_df: pd.DataFrame) -> bool:
+    required_columns = ["url", "queries", "query_language", "query_languages"]
+    if any(column not in candidate_urls_df.columns for column in required_columns):
+        return False
+    if candidate_urls_df.empty:
+        return False
+
+    return not candidate_urls_df["query_language"].isna().any()
+
+
+def _url_key_frame(df: pd.DataFrame) -> pd.DataFrame:
+    return (
+        df[["osm_type", "osm_id", "url"]]
+        .drop_duplicates()
+        .sort_values(["osm_type", "osm_id", "url"])
+        .reset_index(drop=True)
+    )
+
+
+def fetch_url_artifact_matches_candidate_limit(
+    candidate_urls_df: pd.DataFrame,
+    fetch_urls_df: pd.DataFrame,
+    max_urls_per_polygon: int | None,
+) -> bool:
+    required_columns = ["osm_type", "osm_id", "url", "best_rank"]
+    if any(column not in candidate_urls_df.columns for column in required_columns):
+        return False
+    if any(column not in fetch_urls_df.columns for column in required_columns):
+        return False
+
+    expected_fetch_urls_df = candidate_urls_df.sort_values(
+        ["osm_type", "osm_id", "best_rank", "url"]
+    )
+    if max_urls_per_polygon is not None:
+        expected_fetch_urls_df = expected_fetch_urls_df.groupby(
+            POLYGON_KEY,
+            group_keys=False,
+            dropna=False,
+        ).head(max_urls_per_polygon)
+
+    return _url_key_frame(fetch_urls_df).equals(_url_key_frame(expected_fetch_urls_df))
 
 
 def build_search_rows_for_query(
@@ -293,6 +353,19 @@ def attach_polygon_metadata(
         on=POLYGON_KEY,
         how="left",
     )
+
+
+def filter_to_sentence_polygons(
+    df: pd.DataFrame,
+    sentence_df: pd.DataFrame,
+) -> pd.DataFrame:
+    if df.empty or sentence_df.empty:
+        return df.head(0).copy()
+    if any(column not in df.columns for column in POLYGON_KEY):
+        return df.copy()
+
+    complete_keys_df = sentence_df[POLYGON_KEY].drop_duplicates()
+    return df.merge(complete_keys_df, on=POLYGON_KEY, how="inner")
 
 
 def _unique_polygon_count(df: pd.DataFrame) -> int:

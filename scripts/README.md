@@ -31,13 +31,15 @@ the repository root with `uv run python scripts/<stage>/<script>.py`.
 - `evidence/extract_sentence_candidate.py` converts fetched page text into sentence-level candidate rows.
 - `evidence/sample_sentence_candidates.py` samples high-quality sentence candidates for manual inspection or LLM labeling.
 - `evidence/build_labeling_candidates.py` deduplicates high-quality sentence candidates, assigns stable IDs, and writes parquet plus JSONL inputs for LLM labeling.
-- `evidence/run_worldwide_sentence_pilot.py` runs the 10-polygon worldwide pilot end to end: localized Brave Search, candidate URL selection, page text fetching, quality metadata, and sentence candidate extraction capped at 10 sentences per polygon and 1 sentence per URL.
-- `evidence/build_english_only_sentence_pilot.py` reuses the worldwide pilot search cache, keeps English-query candidate URLs, filters sentence candidates with an English stopword heuristic, and writes a parallel 10-polygon English-only pilot.
+- `evidence/run_worldwide_sentence_pilot.py` runs the 10-polygon worldwide pilot end to end: localized Brave Search, candidate URL selection, page text fetching, quality metadata, FineWeb-inspired sentence filtering, MinHash sentence deduplication, and sentence candidate extraction capped at 10 sentences per polygon and 1 sentence per URL.
+- `evidence/build_english_only_sentence_pilot.py` reuses the worldwide pilot search cache, keeps English-query candidate URLs, filters sentence candidates with FineWeb-inspired sentence gates plus an English stopword heuristic, applies MinHash sentence deduplication, and writes a parallel 10-polygon English-only pilot.
 
 ## Labeling
 
 - `labeling/build_labeling_prompt_sample.py` prepares a small parquet and JSONL batch of binary `relevant`/`irrelevant` prompts from existing sentence-level labeling candidates. It does not call an LLM.
 - `labeling/run_llama_cpp_labeling_sample.py` labels a tiny prompt batch with the configured Qwen GGUF through `llama-cpp-python`. This is intended for a remote GPU machine and requires `llama-cpp-python` plus the model there.
+- `labeling/build_english_pilot_labeling_requests.py` prepares the full English-only pilot prompt batch from `data/processed/pilots/worldwide_sentence_pilot_10_english_only/sentence_candidates.parquet`, preserving one row per sentence and writing parquet plus JSONL requests.
+- `labeling/run_llama_cpp_english_pilot_labeling.py` labels the English-only pilot request parquet with the configured Qwen GGUF through `llama-cpp-python` and writes `sentence_candidates_llm_labeled.parquet`. This should run on a remote GPU machine such as Grid'5000.
 
 ## Review
 

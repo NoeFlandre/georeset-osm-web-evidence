@@ -4,15 +4,20 @@ import os
 import time
 from pathlib import Path
 from typing import Callable
-from urllib.parse import urlparse
 
 import pandas as pd
 import requests
 
-from georeset_osm_web_evidence.evidence.page_text import build_page_text_row
+from georeset_osm_web_evidence.evidence.page_text import (
+    fetch_candidate_pages,
+    page_text_quality_artifact_is_usable,
+)
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
+    MINHASH_DUPLICATE_THRESHOLD,
     build_sentence_candidate_dataframe,
+    deduplicate_near_duplicate_sentence_candidates,
     select_complete_sentence_candidates,
+    sentence_artifact_respects_sampling_limits,
 )
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     add_pilot_metadata,
@@ -20,14 +25,20 @@ from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     build_candidate_urls,
     build_limited_localized_queries,
     build_search_rows_for_query,
+    candidate_url_artifact_is_usable,
+    fetch_url_artifact_matches_candidate_limit,
+    filter_to_sentence_polygons,
     select_stratified_pilot_polygons,
     summarize_sentence_pilot,
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
+from georeset_osm_web_evidence.text.sentences import (
+    SENTENCE_FILTER_PROFILE,
+    SENTENCE_FILTER_RULES,
+)
 from georeset_osm_web_evidence.web.quality import add_quality_metadata
-from georeset_osm_web_evidence.web.text import fetch_page_text
 
 
 INPUT_POLYGONS_PATH = Path(
@@ -80,7 +91,7 @@ MAX_QUERIES_PER_POLYGON = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON", "4")
 )
 MAX_URLS_PER_POLYGON = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "15")
+    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "25")
 )
 MAX_SENTENCES_PER_POLYGON = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_POLYGON", "10")
@@ -97,55 +108,6 @@ FETCH_DELAY_SECONDS = float(
 FETCH_TIMEOUT_SECONDS = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_TIMEOUT_SECONDS", "10")
 )
-PAGE_TEXT_COLUMNS = [
-    "osm_type",
-    "osm_id",
-    "polygon_name",
-    "has_wikipedia_articles",
-    "provider",
-    "source_url",
-    "search_title",
-    "search_description",
-    "search_queries",
-    "url",
-    "final_url",
-    "status_code",
-    "title",
-    "text",
-    "text_length",
-    "fetch_error",
-    "extraction_method",
-    "extraction_error",
-    "best_rank",
-    "world_region",
-    "country",
-    "local_language",
-    "query_local_language",
-    "query_language",
-    "area_size_bin",
-    "polygon_category",
-]
-
-
-def is_pdf_url(url: str) -> bool:
-    path = urlparse(url).path.lower()
-    return path.endswith(".pdf")
-
-
-def skipped_page_text_result(url: str, fetch_error: str) -> dict:
-    return {
-        "url": url,
-        "final_url": None,
-        "status_code": None,
-        "title": None,
-        "text": None,
-        "text_length": 0,
-        "fetch_error": fetch_error,
-        "extraction_method": None,
-        "extraction_error": None,
-    }
-
-
 def configure_logging() -> logging.Logger:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("worldwide_sentence_pilot")
@@ -192,6 +154,35 @@ def load_or_build_dataframe(
     logger.info("Saved %s rows for %s to %s", len(dataframe), stage_name, path)
 
     return dataframe
+
+
+def load_or_build_page_text_quality(
+    page_text_df: pd.DataFrame,
+    logger: logging.Logger,
+    reset: bool,
+) -> pd.DataFrame:
+    if PAGE_TEXT_WITH_QUALITY_PATH.exists() and not reset:
+        page_text_with_quality_df = pd.read_parquet(PAGE_TEXT_WITH_QUALITY_PATH)
+        if page_text_quality_artifact_is_usable(page_text_with_quality_df):
+            logger.info(
+                "Loaded %s rows for page-text quality metadata from %s",
+                len(page_text_with_quality_df),
+                PAGE_TEXT_WITH_QUALITY_PATH,
+            )
+            return page_text_with_quality_df
+
+        logger.info(
+            "Rebuilding page-text quality metadata because metadata is incomplete"
+        )
+
+    page_text_with_quality_df = add_quality_metadata(page_text_df)
+    page_text_with_quality_df.to_parquet(PAGE_TEXT_WITH_QUALITY_PATH, index=False)
+    logger.info(
+        "Saved %s rows for page-text quality metadata to %s",
+        len(page_text_with_quality_df),
+        PAGE_TEXT_WITH_QUALITY_PATH,
+    )
+    return page_text_with_quality_df
 
 
 def pilot_artifact_is_usable(pilot_gdf: pd.DataFrame) -> bool:
@@ -382,12 +373,23 @@ def load_or_build_candidate_url_artifacts(
     if CANDIDATE_URLS_PATH.exists() and FETCH_URLS_PATH.exists() and not reset:
         candidate_urls_df = pd.read_parquet(CANDIDATE_URLS_PATH)
         fetch_urls_df = pd.read_parquet(FETCH_URLS_PATH)
-        logger.info(
-            "Loaded %s candidate URLs and %s fetch URLs",
-            len(candidate_urls_df),
-            len(fetch_urls_df),
-        )
-        return candidate_urls_df, fetch_urls_df, False
+        if (
+            candidate_url_artifact_is_usable(candidate_urls_df)
+            and candidate_url_artifact_is_usable(fetch_urls_df)
+            and fetch_url_artifact_matches_candidate_limit(
+                candidate_urls_df,
+                fetch_urls_df,
+                MAX_URLS_PER_POLYGON,
+            )
+        ):
+            logger.info(
+                "Loaded %s candidate URLs and %s fetch URLs",
+                len(candidate_urls_df),
+                len(fetch_urls_df),
+            )
+            return candidate_urls_df, fetch_urls_df, False
+
+        logger.info("Rebuilding candidate URL artifacts because metadata is incomplete")
 
     candidate_urls_df, fetch_urls_df = build_candidate_url_artifacts(
         search_results_df,
@@ -403,97 +405,6 @@ def load_or_build_candidate_url_artifacts(
     logger.info("Selected %s URLs to fetch at %s", len(fetch_urls_df), FETCH_URLS_PATH)
 
     return candidate_urls_df, fetch_urls_df, True
-
-
-def fetch_candidate_pages(
-    candidate_urls_df: pd.DataFrame,
-    logger: logging.Logger,
-    output_path: Path = PAGE_TEXT_PATH,
-    reset: bool = False,
-    stop_when: Callable[[pd.DataFrame], bool] | None = None,
-    stop_check_interval: int = 10,
-) -> tuple[pd.DataFrame, bool]:
-    if stop_check_interval <= 0:
-        raise ValueError("stop_check_interval must be positive")
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_path.exists() and not reset:
-        page_text_df = pd.read_parquet(output_path)
-        if "source_url" not in page_text_df.columns:
-            raise ValueError(f"{output_path} is missing required column: source_url")
-        for column in PAGE_TEXT_COLUMNS:
-            if column not in page_text_df.columns:
-                page_text_df[column] = pd.NA
-        page_text_df = page_text_df[PAGE_TEXT_COLUMNS]
-    else:
-        page_text_df = pd.DataFrame(columns=PAGE_TEXT_COLUMNS)
-
-    changed = False
-    fetched_urls = set(page_text_df["source_url"].dropna())
-    if stop_when is not None and stop_when(page_text_df):
-        logger.info("Page fetch quota is already satisfied from cached rows")
-        return page_text_df, changed
-
-    for url_index, row in enumerate(candidate_urls_df.itertuples(), start=1):
-        if row.url in fetched_urls:
-            logger.info(
-                "Skipping already fetched URL %s/%s: %s",
-                url_index,
-                len(candidate_urls_df),
-                row.url,
-            )
-            continue
-
-        if is_pdf_url(row.url):
-            logger.info(
-                "Skipping PDF URL %s/%s: %s",
-                url_index,
-                len(candidate_urls_df),
-                row.url,
-            )
-            page_text = skipped_page_text_result(row.url, "Skipped PDF URL")
-        else:
-            logger.info(
-                "Fetching URL %s/%s: %s",
-                url_index,
-                len(candidate_urls_df),
-                row.url,
-            )
-            page_text = fetch_page_text(
-                row.url,
-                timeout_seconds=FETCH_TIMEOUT_SECONDS,
-            )
-        page_row = build_page_text_row(row, page_text)
-        page_row.update(
-            {
-                "best_rank": row.best_rank,
-                "world_region": row.world_region,
-                "country": row.country,
-                "local_language": row.local_language,
-                "query_local_language": row.query_local_language,
-                "query_language": getattr(row, "query_language", None),
-                "area_size_bin": row.area_size_bin,
-                "polygon_category": row.polygon_category,
-            }
-        )
-        page_text_df.loc[len(page_text_df)] = [
-            page_row.get(column) for column in PAGE_TEXT_COLUMNS
-        ]
-        page_text_df.to_parquet(output_path, index=False)
-        fetched_urls.add(row.url)
-        changed = True
-
-        if (
-            stop_when is not None
-            and len(page_text_df) % stop_check_interval == 0
-            and stop_when(page_text_df)
-        ):
-            logger.info("Stopping page fetch because sentence quota is satisfied")
-            break
-
-        time.sleep(FETCH_DELAY_SECONDS)
-
-    return page_text_df, changed
 
 
 def enrich_sentence_metadata(
@@ -512,31 +423,12 @@ def build_pilot_sentence_candidates(
 ) -> pd.DataFrame:
     sentence_df = build_sentence_candidate_dataframe(page_text_with_quality_df)
     sentence_df = enrich_sentence_metadata(sentence_df, pilot_gdf)
+    sentence_df = deduplicate_near_duplicate_sentence_candidates(sentence_df)
     return select_complete_sentence_candidates(
         sentence_df,
         sentences_per_polygon=MAX_SENTENCES_PER_POLYGON,
         sentences_per_url=MAX_SENTENCES_PER_URL,
         target_polygon_count=TARGET_COMPLETE_POLYGON_COUNT,
-    )
-
-
-def sentence_artifact_respects_sampling_limits(sentence_df: pd.DataFrame) -> bool:
-    required_columns = ["osm_type", "osm_id", "url"]
-    if any(column not in sentence_df.columns for column in required_columns):
-        return False
-    if sentence_df.empty:
-        return False
-
-    per_url_counts = sentence_df.groupby(required_columns, dropna=False).size()
-    per_polygon_counts = sentence_df.groupby(
-        ["osm_type", "osm_id"],
-        dropna=False,
-    ).size()
-
-    return bool(
-        per_url_counts.le(MAX_SENTENCES_PER_URL).all()
-        and per_polygon_counts.eq(MAX_SENTENCES_PER_POLYGON).all()
-        and len(per_polygon_counts) == TARGET_COMPLETE_POLYGON_COUNT
     )
 
 
@@ -549,7 +441,12 @@ def load_or_build_sentence_candidates(
 ) -> pd.DataFrame:
     if path.exists() and not reset:
         sentence_df = pd.read_parquet(path)
-        if sentence_artifact_respects_sampling_limits(sentence_df):
+        if sentence_artifact_respects_sampling_limits(
+            sentence_df,
+            sentences_per_polygon=MAX_SENTENCES_PER_POLYGON,
+            sentences_per_url=MAX_SENTENCES_PER_URL,
+            target_polygon_count=TARGET_COMPLETE_POLYGON_COUNT,
+        ):
             logger.info("Loaded %s rows for sentence candidates from %s", len(sentence_df), path)
             return sentence_df
 
@@ -571,18 +468,12 @@ def sentence_quota_is_satisfied(
 
     page_text_with_quality_df = add_quality_metadata(page_text_df)
     sentence_df = build_pilot_sentence_candidates(page_text_with_quality_df, pilot_gdf)
-    return sentence_artifact_respects_sampling_limits(sentence_df)
-
-
-def filter_to_sentence_polygons(df: pd.DataFrame, sentence_df: pd.DataFrame) -> pd.DataFrame:
-    key_columns = ["osm_type", "osm_id"]
-    if df.empty or sentence_df.empty:
-        return df.head(0).copy()
-    if any(column not in df.columns for column in key_columns):
-        return df.copy()
-
-    complete_keys_df = sentence_df[key_columns].drop_duplicates()
-    return df.merge(complete_keys_df, on=key_columns, how="inner")
+    return sentence_artifact_respects_sampling_limits(
+        sentence_df,
+        sentences_per_polygon=MAX_SENTENCES_PER_POLYGON,
+        sentences_per_url=MAX_SENTENCES_PER_URL,
+        target_polygon_count=TARGET_COMPLETE_POLYGON_COUNT,
+    )
 
 
 def save_complete_sentence_polygons(
@@ -665,22 +556,22 @@ def main() -> None:
         reset=candidate_reset,
     )
 
-    page_text_reset = candidate_reset or candidate_rebuilt
+    page_text_reset = RESET_OUTPUTS
     page_text_df, page_text_changed = fetch_candidate_pages(
         fetch_urls_df,
         logger,
         output_path=PAGE_TEXT_PATH,
         reset=page_text_reset,
         stop_when=lambda dataframe: sentence_quota_is_satisfied(dataframe, pilot_gdf),
+        fetch_timeout_seconds=FETCH_TIMEOUT_SECONDS,
+        fetch_delay_seconds=FETCH_DELAY_SECONDS,
     )
     logger.info("Saved %s fetched page rows to %s", len(page_text_df), PAGE_TEXT_PATH)
 
     text_metadata_reset = page_text_reset or page_text_changed
-    page_text_with_quality_df = load_or_build_dataframe(
-        path=PAGE_TEXT_WITH_QUALITY_PATH,
-        stage_name="page-text quality metadata",
-        logger=logger,
-        build=lambda: add_quality_metadata(page_text_df),
+    page_text_with_quality_df = load_or_build_page_text_quality(
+        page_text_df,
+        logger,
         reset=text_metadata_reset,
     )
 
@@ -710,6 +601,10 @@ def main() -> None:
             "target_complete_polygon_count": TARGET_COMPLETE_POLYGON_COUNT,
             "sentences_per_polygon_target": MAX_SENTENCES_PER_POLYGON,
             "sentences_per_url_target": MAX_SENTENCES_PER_URL,
+            "sentence_deduplication_method": "minhash",
+            "sentence_deduplication_threshold": MINHASH_DUPLICATE_THRESHOLD,
+            "sentence_filter_profile": SENTENCE_FILTER_PROFILE,
+            "sentence_filter_rules": list(SENTENCE_FILTER_RULES),
         }
     )
     write_analysis(analysis, logger)

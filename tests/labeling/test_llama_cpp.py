@@ -16,8 +16,20 @@ from georeset_osm_web_evidence.labeling.llama_cpp import (
     get_llama_cpp_model_settings_from_env,
     load_llama_cpp_model,
 )
+from georeset_osm_web_evidence.labeling.llama_cpp_batch import (
+    run_llama_cpp_prompt_batch,
+)
 from scripts.labeling.run_llama_cpp_labeling_sample import (
     run_llama_cpp_labeling_sample,
+)
+from scripts.labeling.run_llama_cpp_english_pilot_labeling import (
+    run_llama_cpp_english_pilot_labeling,
+)
+from scripts.labeling.run_llama_cpp_context_query_pilot_labeling import (
+    run_llama_cpp_context_query_pilot_labeling,
+)
+from scripts.labeling.run_llama_cpp_location_topic_pilot_labeling import (
+    run_llama_cpp_location_topic_pilot_labeling,
 )
 
 
@@ -95,16 +107,16 @@ class LlamaCppProviderTests(unittest.TestCase):
         self.assertEqual(FakeLlama.loaded_with["verbose"], False)
 
     def test_label_function_calls_llama_cpp_with_deterministic_non_thinking_settings(self):
-        llm = FakeLlama(response_text=" irrelevant \n")
+        llm = FakeLlama(response_text='{"label":"irrelevant"}')
         label_fn = create_llama_cpp_label_fn(llm)
 
         response = label_fn("Classify this sentence.")
 
-        self.assertEqual(response, "irrelevant")
+        self.assertEqual(response, '{"label":"irrelevant"}')
         self.assertEqual(len(llm.calls), 1)
         call = llm.calls[0]
         self.assertEqual(call["temperature"], 0.0)
-        self.assertEqual(call["max_tokens"], 8)
+        self.assertEqual(call["max_tokens"], 24)
         self.assertNotIn("chat_template_kwargs", call)
         self.assertEqual(
             call["messages"],
@@ -168,7 +180,11 @@ class LlamaCppProviderTests(unittest.TestCase):
         )
 
         def fake_label_fn(prompt: str) -> str:
-            return "relevant" if prompt == "Prompt 1" else "irrelevant"
+            return (
+                '{"label":"relevant"}'
+                if prompt == "Prompt 1"
+                else '{"label":"irrelevant"}'
+            )
 
         with TemporaryDirectory() as temporary_directory:
             input_path = Path(temporary_directory) / "requests.parquet"
@@ -186,6 +202,194 @@ class LlamaCppProviderTests(unittest.TestCase):
         self.assertEqual(labeled_df["llm_label"].to_list(), ["relevant", "irrelevant"])
         self.assertEqual(saved_df["llm_label"].to_list(), ["relevant", "irrelevant"])
         self.assertEqual(saved_df["parse_error"].to_list(), [None, None])
+
+    def test_shared_llama_cpp_batch_runner_labels_and_saves_all_rows(self):
+        prompt_df = pd.DataFrame(
+            [
+                {
+                    "sentence_id": "s1",
+                    "prompt": "Prompt 1",
+                    "model_input": "Sentence 1",
+                },
+                {
+                    "sentence_id": "s2",
+                    "prompt": "Prompt 2",
+                    "model_input": "Sentence 2",
+                },
+            ]
+        )
+
+        def fake_label_fn(prompt: str) -> str:
+            return (
+                '{"label":"relevant"}'
+                if prompt == "Prompt 1"
+                else '{"label":"irrelevant"}'
+            )
+
+        with TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "requests.parquet"
+            output_path = Path(temporary_directory) / "nested" / "labels.parquet"
+            prompt_df.to_parquet(input_path, index=False)
+
+            labeled_df = run_llama_cpp_prompt_batch(
+                input_path=input_path,
+                output_path=output_path,
+                label_fn=fake_label_fn,
+            )
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(labeled_df["llm_label"].to_list(), ["relevant", "irrelevant"])
+        self.assertEqual(saved_df["llm_label"].to_list(), ["relevant", "irrelevant"])
+        self.assertEqual(saved_df["parse_error"].to_list(), [None, None])
+
+    def test_shared_llama_cpp_batch_runner_can_limit_rows(self):
+        prompt_df = pd.DataFrame(
+            [
+                {"sentence_id": "s1", "prompt": "Prompt 1", "model_input": "Sentence 1"},
+                {"sentence_id": "s2", "prompt": "Prompt 2", "model_input": "Sentence 2"},
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "requests.parquet"
+            output_path = Path(temporary_directory) / "labels.parquet"
+            prompt_df.to_parquet(input_path, index=False)
+
+            labeled_df = run_llama_cpp_prompt_batch(
+                input_path=input_path,
+                output_path=output_path,
+                row_limit=1,
+                label_fn=lambda prompt: '{"label":"relevant"}',
+            )
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(labeled_df["sentence_id"].to_list(), ["s1"])
+        self.assertEqual(saved_df["sentence_id"].to_list(), ["s1"])
+
+    def test_english_pilot_script_labels_all_rows_by_default(self):
+        prompt_df = pd.DataFrame(
+            [
+                {
+                    "sentence_id": "s1",
+                    "prompt": "Prompt 1",
+                    "model_input": "Sentence 1",
+                },
+                {
+                    "sentence_id": "s2",
+                    "prompt": "Prompt 2",
+                    "model_input": "Sentence 2",
+                },
+                {
+                    "sentence_id": "s3",
+                    "prompt": "Prompt 3",
+                    "model_input": "Sentence 3",
+                },
+            ]
+        )
+
+        def fake_label_fn(prompt: str) -> str:
+            return (
+                '{"label":"relevant"}'
+                if prompt in {"Prompt 1", "Prompt 3"}
+                else '{"label":"irrelevant"}'
+            )
+
+        with TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "english_requests.parquet"
+            output_path = Path(temporary_directory) / "english_labels.parquet"
+            prompt_df.to_parquet(input_path, index=False)
+
+            labeled_df = run_llama_cpp_english_pilot_labeling(
+                input_path=input_path,
+                output_path=output_path,
+                label_fn=fake_label_fn,
+            )
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(len(labeled_df), 3)
+        self.assertEqual(
+            labeled_df["llm_label"].to_list(),
+            ["relevant", "irrelevant", "relevant"],
+        )
+        self.assertEqual(saved_df["llm_label"].to_list(), labeled_df["llm_label"].to_list())
+
+    def test_context_query_pilot_script_labels_all_rows_by_default(self):
+        prompt_df = pd.DataFrame(
+            [
+                {
+                    "sentence_id": "s1",
+                    "prompt": "Prompt 1",
+                    "model_input": "Sentence 1",
+                },
+                {
+                    "sentence_id": "s2",
+                    "prompt": "Prompt 2",
+                    "model_input": "Sentence 2",
+                },
+            ]
+        )
+
+        def fake_label_fn(prompt: str) -> str:
+            return (
+                '{"label":"relevant"}'
+                if prompt == "Prompt 1"
+                else '{"label":"irrelevant"}'
+            )
+
+        with TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "context_requests.parquet"
+            output_path = Path(temporary_directory) / "context_labels.parquet"
+            prompt_df.to_parquet(input_path, index=False)
+
+            labeled_df = run_llama_cpp_context_query_pilot_labeling(
+                input_path=input_path,
+                output_path=output_path,
+                label_fn=fake_label_fn,
+            )
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(len(labeled_df), 2)
+        self.assertEqual(labeled_df["llm_label"].to_list(), ["relevant", "irrelevant"])
+        self.assertEqual(saved_df["llm_label"].to_list(), labeled_df["llm_label"].to_list())
+
+    def test_location_topic_pilot_script_labels_all_rows_by_default(self):
+        prompt_df = pd.DataFrame(
+            [
+                {
+                    "sentence_id": "s1",
+                    "prompt": "Prompt 1",
+                    "model_input": "Sentence 1",
+                },
+                {
+                    "sentence_id": "s2",
+                    "prompt": "Prompt 2",
+                    "model_input": "Sentence 2",
+                },
+            ]
+        )
+
+        def fake_label_fn(prompt: str) -> str:
+            return (
+                '{"label":"relevant"}'
+                if prompt == "Prompt 1"
+                else '{"label":"irrelevant"}'
+            )
+
+        with TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "location_topic_requests.parquet"
+            output_path = Path(temporary_directory) / "location_topic_labels.parquet"
+            prompt_df.to_parquet(input_path, index=False)
+
+            labeled_df = run_llama_cpp_location_topic_pilot_labeling(
+                input_path=input_path,
+                output_path=output_path,
+                label_fn=fake_label_fn,
+            )
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(len(labeled_df), 2)
+        self.assertEqual(labeled_df["llm_label"].to_list(), ["relevant", "irrelevant"])
+        self.assertEqual(saved_df["llm_label"].to_list(), labeled_df["llm_label"].to_list())
 
 
 if __name__ == "__main__":

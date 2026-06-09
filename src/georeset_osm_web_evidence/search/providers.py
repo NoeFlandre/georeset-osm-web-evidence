@@ -23,6 +23,8 @@ def search_brave(
     api_key: str | None = None,
     max_retries: int = 3,
     retry_delay_seconds: int = 2,
+    country: str = "FR",
+    search_lang: str = "fr",
 ) -> list[dict]:
     api_key = api_key or os.environ.get("BRAVE_SEARCH_API_KEY")
 
@@ -38,8 +40,8 @@ def search_brave(
                 params={
                     "q": query,
                     "count": count,
-                    "country": "FR",
-                    "search_lang": "fr",
+                    "country": country,
+                    "search_lang": search_lang,
                 },
                 headers={
                     "Accept": "application/json",

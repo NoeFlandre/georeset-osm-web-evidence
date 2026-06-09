@@ -7,15 +7,22 @@ import pandas as pd
 
 from georeset_osm_web_evidence.labeling.parser import parse_binary_label_response
 from georeset_osm_web_evidence.labeling.prompt import (
+    LOCATION_AWARE_PROMPT_VERSION,
     PROMPT_VERSION,
+    build_location_aware_binary_label_prompt,
     build_binary_label_prompt,
 )
 from georeset_osm_web_evidence.labeling.requests import (
+    build_location_aware_sentence_candidate_prompt_rows,
+    build_sentence_candidate_prompt_rows,
     build_labeling_prompt_rows,
     write_labeling_prompt_jsonl,
 )
 from scripts.labeling.build_labeling_prompt_sample import (
     run_labeling_prompt_sample_build,
+)
+from scripts.labeling.build_english_pilot_labeling_requests import (
+    run_english_pilot_labeling_request_build,
 )
 
 
@@ -25,11 +32,34 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
             "The forest contains wetlands visible from satellite imagery."
         )
 
+        self.assertIn("valid JSON", prompt)
         self.assertIn("remote sensing", prompt)
         self.assertIn("relevant", prompt)
         self.assertIn("irrelevant", prompt)
         self.assertIn("The forest contains wetlands", prompt)
-        self.assertIn("Reply with exactly one word", prompt)
+        self.assertIn('{"label":"relevant"}', prompt)
+        self.assertNotIn("rationale", prompt.lower())
+        self.assertNotIn("confidence", prompt.lower())
+
+    def test_builds_location_aware_prompt_for_specific_polygon_relevance(self):
+        prompt = build_location_aware_binary_label_prompt(
+            sentence="The reserve contains extensive wetland habitat.",
+            polygon_name="Sagole Baobab",
+            location_context="South Africa, Africa",
+            polygon_category="protected_area",
+            page_title="Sagole Baobab travel guide",
+            search_query='"Sagole Baobab" "South Africa" "protected area"',
+        )
+
+        self.assertIn("Target polygon", prompt)
+        self.assertIn("Sagole Baobab", prompt)
+        self.assertIn("South Africa, Africa", prompt)
+        self.assertIn("specific target polygon", prompt)
+        self.assertIn("generic fact", prompt)
+        self.assertIn("remote-sensing", prompt)
+        self.assertNotIn("Use only the sentence", prompt)
+        self.assertIn('{"label":"relevant"}', prompt)
+        self.assertIn('{"label":"irrelevant"}', prompt)
         self.assertNotIn("rationale", prompt.lower())
         self.assertNotIn("confidence", prompt.lower())
 
@@ -41,9 +71,23 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
             build_binary_label_prompt(None)
 
     def test_parses_only_binary_labels(self):
-        self.assertEqual(parse_binary_label_response(" Relevant \n"), "relevant")
-        self.assertEqual(parse_binary_label_response('"irrelevant".'), "irrelevant")
-        self.assertEqual(parse_binary_label_response("```relevant```"), "relevant")
+        self.assertEqual(
+            parse_binary_label_response('{"label": "relevant"}'),
+            "relevant",
+        )
+        self.assertEqual(
+            parse_binary_label_response('```json\n{"label":"irrelevant"}\n```'),
+            "irrelevant",
+        )
+
+        with self.assertRaises(ValueError):
+            parse_binary_label_response("relevant")
+
+        with self.assertRaises(ValueError):
+            parse_binary_label_response('{"label": "relevant", "rationale": "wetlands"}')
+
+        with self.assertRaises(ValueError):
+            parse_binary_label_response('{"label": "unclear"}')
 
         with self.assertRaises(ValueError):
             parse_binary_label_response("relevant because wetlands are visible")
@@ -85,6 +129,72 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
         self.assertEqual(prompt_df.loc[0, "raw_response"], None)
         self.assertEqual(prompt_df.loc[0, "parse_error"], None)
         self.assertEqual(prompt_df.loc[0, "polygon_name"], "Marais Alpha")
+
+    def test_builds_prompt_rows_directly_from_sentence_candidates_without_deduping(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "url": "https://example.org/a",
+                    "sentence": "This wetland contains reed beds.",
+                    "polygon_name": "Marais Alpha",
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 2,
+                    "url": "https://example.org/b",
+                    "sentence": "This wetland contains reed beds.",
+                    "polygon_name": "Marais Beta",
+                },
+            ]
+        )
+
+        prompt_df = build_sentence_candidate_prompt_rows(sentence_df)
+
+        self.assertEqual(len(prompt_df), 2)
+        self.assertEqual(
+            prompt_df["model_input"].to_list(),
+            [
+                "This wetland contains reed beds.",
+                "This wetland contains reed beds.",
+            ],
+        )
+        self.assertNotEqual(
+            prompt_df.loc[0, "sentence_id"],
+            prompt_df.loc[1, "sentence_id"],
+        )
+        self.assertIn("This wetland contains reed beds.", prompt_df.loc[0, "prompt"])
+        self.assertEqual(prompt_df["llm_label"].to_list(), [None, None])
+
+    def test_builds_location_aware_prompt_rows_from_sentence_candidates(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "url": "https://example.org/a",
+                    "sentence": "The reserve contains extensive wetland habitat.",
+                    "polygon_name": "Sagole Baobab",
+                    "country": "South Africa",
+                    "world_region": "Africa",
+                    "polygon_category": "protected_area",
+                    "title": "Sagole Baobab travel guide",
+                    "search_queries": '"Sagole Baobab" "South Africa" "protected area"',
+                }
+            ]
+        )
+
+        prompt_df = build_location_aware_sentence_candidate_prompt_rows(sentence_df)
+
+        self.assertEqual(len(prompt_df), 1)
+        self.assertEqual(
+            prompt_df.loc[0, "prompt_version"],
+            LOCATION_AWARE_PROMPT_VERSION,
+        )
+        self.assertIn("Sagole Baobab", prompt_df.loc[0, "prompt"])
+        self.assertIn("South Africa, Africa", prompt_df.loc[0, "prompt"])
+        self.assertEqual(prompt_df.loc[0, "llm_label"], None)
 
     def test_writes_prompt_jsonl_and_script_outputs(self):
         labeling_df = pd.DataFrame(
@@ -130,6 +240,44 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
             ["prompt", "prompt_version", "sentence_id"],
         )
         self.assertEqual(jsonl_rows[0]["sentence_id"], saved_df.loc[0, "sentence_id"])
+
+    def test_builds_english_pilot_prompt_request_artifacts(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "url": "https://example.org/a",
+                    "sentence": "This forest contains dense evergreen canopy.",
+                    "polygon_name": "Forest Alpha",
+                    "query_language": "en",
+                }
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            input_path = temp_path / "english_sentence_candidates.parquet"
+            parquet_output_path = temp_path / "llm_requests.parquet"
+            jsonl_output_path = temp_path / "llm_requests.jsonl"
+            sentence_df.to_parquet(input_path, index=False)
+
+            prompt_df = run_english_pilot_labeling_request_build(
+                input_path=input_path,
+                parquet_output_path=parquet_output_path,
+                jsonl_output_path=jsonl_output_path,
+            )
+            saved_df = pd.read_parquet(parquet_output_path)
+            jsonl_rows = [
+                json.loads(line)
+                for line in jsonl_output_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        self.assertEqual(len(prompt_df), 1)
+        self.assertEqual(len(saved_df), 1)
+        self.assertEqual(len(jsonl_rows), 1)
+        self.assertEqual(saved_df.loc[0, "model_input"], sentence_df.loc[0, "sentence"])
+        self.assertEqual(saved_df.loc[0, "llm_label"], None)
 
 
 if __name__ == "__main__":

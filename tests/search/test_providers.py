@@ -60,7 +60,29 @@ class SearchProviderTests(unittest.TestCase):
         self.assertEqual(get.call_args.args[0], BRAVE_SEARCH_URL)
         self.assertEqual(kwargs["params"]["q"], "query")
         self.assertEqual(kwargs["params"]["count"], 3)
+        self.assertEqual(kwargs["params"]["country"], "FR")
+        self.assertEqual(kwargs["params"]["search_lang"], "fr")
         self.assertEqual(kwargs["headers"]["X-Subscription-Token"], "secret")
+
+    @patch("georeset_osm_web_evidence.search.providers.requests.get")
+    def test_search_brave_accepts_explicit_country_and_search_language(self, get):
+        response = Mock()
+        response.json.return_value = {"web": {"results": []}}
+        response.raise_for_status.return_value = None
+        get.return_value = response
+
+        search_brave(
+            "query",
+            count=20,
+            api_key="secret",
+            max_retries=1,
+            country="US",
+            search_lang="en",
+        )
+
+        _, kwargs = get.call_args
+        self.assertEqual(kwargs["params"]["country"], "US")
+        self.assertEqual(kwargs["params"]["search_lang"], "en")
 
     @patch("georeset_osm_web_evidence.search.providers.time.sleep")
     @patch("georeset_osm_web_evidence.search.providers.requests.get")

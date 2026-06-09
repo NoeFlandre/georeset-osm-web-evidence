@@ -5,7 +5,11 @@ from georeset_osm_web_evidence.osm.worldwide_extract_configs import (
     DEFAULT_LANGUAGE_BY_REGION,
     EXTRACT_CONFIGS,
 )
-from georeset_osm_web_evidence.search.queries import build_search_queries
+from georeset_osm_web_evidence.search.queries import (
+    build_contextual_english_search_queries,
+    build_location_topic_english_search_queries,
+    build_search_queries,
+)
 from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
 
 
@@ -96,6 +100,80 @@ class SearchQueryTests(unittest.TestCase):
         self.assertEqual(
             sorted(configured_languages - set(TERMS_BY_LANGUAGE)),
             [],
+        )
+
+    def test_builds_contextual_english_queries_with_location_and_category(self):
+        queries = build_contextual_english_search_queries(
+            osm_tags={"name": "Sagole Baobab", "leisure": "nature_reserve"},
+            country="South Africa",
+            world_region="Africa",
+            source_extract_id="south-africa",
+            polygon_category="protected_area",
+            max_queries=4,
+        )
+
+        self.assertEqual(len(queries), 4)
+        self.assertEqual(len(queries), len(set(queries)))
+        self.assertEqual(
+            queries,
+            [
+                '"Sagole Baobab" "South Africa" nature reserve',
+                '"Sagole Baobab" "Africa" nature reserve',
+                '"Sagole Baobab" "South Africa" protection',
+                '"Sagole Baobab" "South Africa" protected area',
+            ],
+        )
+
+    def test_contextual_english_queries_expand_us_extract_context(self):
+        queries = build_contextual_english_search_queries(
+            osm_tags={"name": "Marion Meadows", "natural": "wetland"},
+            country="us/idaho",
+            world_region="North America",
+            source_extract_id="us/idaho",
+            polygon_category="wetland",
+            max_queries=4,
+        )
+
+        self.assertIn('"Marion Meadows" "Idaho" wetland', queries)
+        self.assertIn('"Marion Meadows" "United States" wetland', queries)
+        self.assertTrue(all("Marion Meadows" in query for query in queries))
+
+    def test_builds_location_topic_queries_with_one_template(self):
+        queries = build_location_topic_english_search_queries(
+            osm_tags={"name": "Sagole Baobab", "leisure": "nature_reserve"},
+            country="South Africa",
+            world_region="Africa",
+            source_extract_id="south-africa",
+            polygon_category="protected_area",
+            max_queries=4,
+        )
+
+        self.assertEqual(
+            queries,
+            [
+                '"Sagole Baobab" "South Africa" "nature reserve"',
+                '"Sagole Baobab" "South Africa" "protection"',
+                '"Sagole Baobab" "South Africa" "biodiversity"',
+                '"Sagole Baobab" "South Africa" "conservation"',
+            ],
+        )
+
+    def test_location_topic_queries_use_best_available_region_context(self):
+        queries = build_location_topic_english_search_queries(
+            osm_tags={"name": "Marion Meadows", "natural": "wetland"},
+            country="us/idaho",
+            world_region="North America",
+            source_extract_id="us/idaho",
+            polygon_category="wetland",
+            max_queries=2,
+        )
+
+        self.assertEqual(
+            queries,
+            [
+                '"Marion Meadows" "Idaho" "wetland"',
+                '"Marion Meadows" "Idaho" "biodiversity"',
+            ],
         )
 
 

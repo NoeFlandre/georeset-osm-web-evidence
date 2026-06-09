@@ -6,23 +6,29 @@ from pathlib import Path
 import pandas as pd
 
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
+    MINHASH_DUPLICATE_THRESHOLD,
     build_sentence_candidate_dataframe,
+    deduplicate_near_duplicate_sentence_candidates,
     filter_english_sentence_candidates,
     select_complete_sentence_candidates,
+    sentence_artifact_respects_sampling_limits,
 )
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     attach_polygon_metadata,
     build_candidate_urls,
+    filter_to_sentence_polygons,
     summarize_sentence_pilot,
 )
-from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
-from georeset_osm_web_evidence.web.quality import add_quality_metadata
-from scripts.evidence.run_worldwide_sentence_pilot import (
+from georeset_osm_web_evidence.evidence.page_text import (
     PAGE_TEXT_COLUMNS,
     fetch_candidate_pages,
-    filter_to_sentence_polygons,
-    sentence_artifact_respects_sampling_limits,
 )
+from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
+from georeset_osm_web_evidence.text.sentences import (
+    SENTENCE_FILTER_PROFILE,
+    SENTENCE_FILTER_RULES,
+)
+from georeset_osm_web_evidence.web.quality import add_quality_metadata
 
 
 BASE_OUTPUT_DIR = Path("data/processed/pilots/worldwide_sentence_pilot_10")
@@ -119,6 +125,7 @@ def build_english_sentence_candidates(
     sentence_df = build_sentence_candidate_dataframe(page_text_with_quality_df)
     sentence_df = attach_polygon_metadata(sentence_df, pilot_gdf)
     sentence_df = filter_english_sentence_candidates(sentence_df)
+    sentence_df = deduplicate_near_duplicate_sentence_candidates(sentence_df)
 
     return select_complete_sentence_candidates(
         sentence_df,
@@ -138,7 +145,12 @@ def english_sentence_quota_is_satisfied(
     page_text_with_quality_df = add_quality_metadata(page_text_df)
     sentence_df = build_english_sentence_candidates(page_text_with_quality_df, pilot_gdf)
 
-    return sentence_artifact_respects_sampling_limits(sentence_df)
+    return sentence_artifact_respects_sampling_limits(
+        sentence_df,
+        sentences_per_polygon=SENTENCES_PER_POLYGON,
+        sentences_per_url=SENTENCES_PER_URL,
+        target_polygon_count=TARGET_POLYGON_COUNT,
+    )
 
 
 def write_analysis(analysis: dict, logger: logging.Logger) -> None:
@@ -222,6 +234,10 @@ def main() -> None:
             "target_complete_polygon_count": TARGET_POLYGON_COUNT,
             "sentences_per_polygon_target": SENTENCES_PER_POLYGON,
             "sentences_per_url_target": SENTENCES_PER_URL,
+            "sentence_deduplication_method": "minhash",
+            "sentence_deduplication_threshold": MINHASH_DUPLICATE_THRESHOLD,
+            "sentence_filter_profile": SENTENCE_FILTER_PROFILE,
+            "sentence_filter_rules": list(SENTENCE_FILTER_RULES),
         }
     )
     write_analysis(analysis, logger)

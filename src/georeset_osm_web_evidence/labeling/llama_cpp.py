@@ -108,7 +108,7 @@ def extract_chat_completion_text(response: dict) -> str:
 def create_llama_cpp_label_fn(
     llm,
     temperature: float = 0.0,
-    max_tokens: int = 8,
+    max_tokens: int = 24,
     top_p: float = 1.0,
     top_k: int = 40,
 ):

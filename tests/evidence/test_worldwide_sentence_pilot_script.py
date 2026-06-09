@@ -2,19 +2,21 @@ import logging
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import requests
 
+from georeset_osm_web_evidence.evidence.page_text import (
+    fetch_candidate_pages,
+    page_text_quality_artifact_is_usable,
+)
 from scripts.evidence.run_worldwide_sentence_pilot import (
     build_pilot_sentence_candidates,
     collect_search_results,
-    fetch_candidate_pages,
     load_or_collect_search_results,
     load_or_build_dataframe,
     pilot_artifact_is_usable,
-    sentence_artifact_respects_sampling_limits,
     search_attempts_cover_expected_queries,
 )
 
@@ -236,15 +238,32 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         self.assertEqual(saved_df["value"].to_list(), ["rebuilt"])
 
     def test_build_pilot_sentence_candidates_applies_sampling_limits(self) -> None:
+        sentence_terms = [
+            "oak",
+            "pine",
+            "birch",
+            "cedar",
+            "willow",
+            "maple",
+            "beech",
+            "ash",
+            "elm",
+            "spruce",
+            "hemlock",
+            "larch",
+        ]
         sentence_rows = []
-        for url_index in range(12):
+        for url_index, sentence_term in enumerate(sentence_terms):
             for sentence_index in range(2):
                 sentence_rows.append(
                     {
                         "osm_type": "way",
                         "osm_id": 1,
                         "url": f"https://example.org/page-{url_index}",
-                        "sentence": f"Sentence {url_index}-{sentence_index}",
+                        "sentence": (
+                            f"The {sentence_term} habitat supports forest "
+                            f"biodiversity and wetland edges case {sentence_index}."
+                        ),
                     }
                 )
         raw_sentence_df = pd.DataFrame(sentence_rows)
@@ -263,24 +282,93 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         self.assertTrue(result.groupby(["osm_type", "osm_id", "url"]).size().eq(1).all())
         self.assertEqual(
             result["sentence"].to_list(),
-            [f"Sentence {url_index}-0" for url_index in range(10)],
+            [
+                (
+                    f"The {sentence_term} habitat supports forest biodiversity "
+                    "and wetland edges case 0."
+                )
+                for sentence_term in sentence_terms[:10]
+            ],
         )
         self.assertEqual(result["world_region"].to_list(), ["Europe"] * 10)
 
-    def test_sentence_artifact_must_reach_complete_target(self) -> None:
-        partial_sentence_df = pd.DataFrame(
-            [
+    def test_build_pilot_sentence_candidates_deduplicates_before_sampling(self) -> None:
+        duplicate_sentence = (
+            "The protected forest contains wetlands and grassland habitats "
+            "near the river valley today."
+        )
+        near_duplicate_sentence = (
+            "The protected forest contains wetlands and grassland habitats "
+            "near the river valley today area."
+        )
+        sentence_rows = [
+            {
+                "osm_type": "way",
+                "osm_id": 1,
+                "url": "https://example.org/duplicate-a",
+                "sentence": duplicate_sentence,
+            },
+            {
+                "osm_type": "way",
+                "osm_id": 1,
+                "url": "https://example.org/duplicate-b",
+                "sentence": near_duplicate_sentence,
+            },
+        ]
+        sentence_terms = [
+            "oak",
+            "pine",
+            "birch",
+            "cedar",
+            "willow",
+            "maple",
+            "beech",
+            "ash",
+            "elm",
+            "spruce",
+        ]
+        for url_index, sentence_term in enumerate(sentence_terms):
+            sentence_rows.append(
                 {
                     "osm_type": "way",
                     "osm_id": 1,
-                    "url": f"https://example.org/page-{index}",
-                    "sentence": f"Sentence {index}",
+                    "url": f"https://example.org/page-{url_index}",
+                    "sentence": (
+                        f"The {sentence_term} woodland corridor contains "
+                        "distinct environmental content for testing."
+                    ),
                 }
-                for index in range(3)
+            )
+        raw_sentence_df = pd.DataFrame(sentence_rows)
+
+        with patch(
+            "scripts.evidence.run_worldwide_sentence_pilot.build_sentence_candidate_dataframe",
+            return_value=raw_sentence_df,
+        ):
+            result = build_pilot_sentence_candidates(
+                pd.DataFrame([{"text": "unused"}]),
+                self._pilot_dataframe(),
+            )
+
+        self.assertEqual(len(result), 10)
+        self.assertNotIn(near_duplicate_sentence, result["sentence"].to_list())
+        self.assertIn("https://example.org/page-8", result["url"].to_list())
+
+    def test_page_text_quality_artifact_rejects_missing_query_language(self) -> None:
+        page_text_with_quality_df = pd.DataFrame(
+            [
+                {
+                    "source_url": "https://example.org/a",
+                    "text": "Cached text.",
+                    "quality_score": 1.0,
+                    "query_language": pd.NA,
+                }
             ]
         )
 
-        self.assertFalse(sentence_artifact_respects_sampling_limits(partial_sentence_df))
+        self.assertFalse(
+            page_text_quality_artifact_is_usable(page_text_with_quality_df)
+        )
 
     def test_fetch_candidate_pages_reuses_existing_rows_and_checkpoints_new_rows(self) -> None:
         candidate_urls_df = pd.DataFrame(
@@ -355,8 +443,7 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
             output_path = Path(temporary_directory) / "page_text.parquet"
             pd.DataFrame([existing_row]).to_parquet(output_path, index=False)
 
-            with patch(
-                "scripts.evidence.run_worldwide_sentence_pilot.fetch_page_text",
+            fetch_page_text = Mock(
                 return_value={
                     "url": "https://example.org/b",
                     "final_url": "https://example.org/b",
@@ -368,15 +455,15 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
                     "extraction_method": "trafilatura",
                     "extraction_error": None,
                 },
-            ) as fetch_page_text, patch(
-                "scripts.evidence.run_worldwide_sentence_pilot.time.sleep"
-            ):
-                result, changed = fetch_candidate_pages(
-                    candidate_urls_df,
-                    self._silent_logger("test_fetch_candidate_pages_checkpoint"),
-                    output_path=output_path,
-                    reset=False,
-                )
+            )
+            result, changed = fetch_candidate_pages(
+                candidate_urls_df,
+                self._silent_logger("test_fetch_candidate_pages_checkpoint"),
+                output_path=output_path,
+                reset=False,
+                fetch_page_text_func=fetch_page_text,
+                sleep_func=lambda _: None,
+            )
 
             saved_df = pd.read_parquet(output_path)
 
@@ -393,6 +480,134 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
             "https://example.org/a",
             "https://example.org/b",
         ])
+
+    def test_fetch_candidate_pages_backfills_cached_query_language(self) -> None:
+        candidate_urls_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "url": "https://example.org/a",
+                    "title": "A",
+                    "description": "desc A",
+                    "queries": ["q1"],
+                    "best_rank": 1,
+                    "world_region": "Europe",
+                    "country": "France",
+                    "local_language": "fr",
+                    "query_local_language": "fr",
+                    "query_language": "en",
+                    "area_size_bin": "medium",
+                    "polygon_category": "forest",
+                }
+            ]
+        )
+        cached_row = {
+            "osm_type": "way",
+            "osm_id": 1,
+            "polygon_name": "Forest A",
+            "has_wikipedia_articles": None,
+            "provider": "brave",
+            "source_url": "https://example.org/a",
+            "search_title": "A",
+            "search_description": "desc A",
+            "search_queries": "q1",
+            "url": "https://example.org/a",
+            "final_url": "https://example.org/a",
+            "status_code": 200,
+            "title": "A",
+            "text": "Cached text.",
+            "text_length": 12,
+            "fetch_error": None,
+            "extraction_method": "trafilatura",
+            "extraction_error": None,
+        }
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "page_text.parquet"
+            pd.DataFrame([cached_row]).to_parquet(output_path, index=False)
+
+            fetch_page_text = Mock()
+            result, changed = fetch_candidate_pages(
+                candidate_urls_df,
+                self._silent_logger("test_fetch_candidate_pages_backfill"),
+                output_path=output_path,
+                reset=False,
+                fetch_page_text_func=fetch_page_text,
+                sleep_func=lambda _: None,
+            )
+
+            saved_df = pd.read_parquet(output_path)
+
+        fetch_page_text.assert_not_called()
+        self.assertTrue(changed)
+        self.assertEqual(result.loc[0, "query_language"], "en")
+        self.assertEqual(saved_df.loc[0, "query_language"], "en")
+
+    def test_fetch_candidate_pages_prunes_cached_rows_outside_candidates(self) -> None:
+        candidate_urls_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": None,
+                    "provider": "brave",
+                    "url": "https://example.org/keep",
+                    "title": "Keep",
+                    "description": "Keep desc",
+                    "queries": ["q1"],
+                    "best_rank": 1,
+                    "world_region": "Europe",
+                    "country": "France",
+                    "local_language": "fr",
+                    "query_local_language": "fr",
+                    "query_language": "en",
+                    "area_size_bin": "medium",
+                    "polygon_category": "forest",
+                }
+            ]
+        )
+        cached_rows = pd.DataFrame(
+            [
+                {
+                    "source_url": "https://example.org/keep",
+                    "url": "https://example.org/keep",
+                    "text": "Keep text.",
+                    "text_length": 10,
+                },
+                {
+                    "source_url": "https://example.org/drop",
+                    "url": "https://example.org/drop",
+                    "text": "Drop text.",
+                    "text_length": 10,
+                },
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = Path(temporary_directory) / "page_text.parquet"
+            cached_rows.to_parquet(output_path, index=False)
+
+            fetch_page_text = Mock()
+            result, changed = fetch_candidate_pages(
+                candidate_urls_df,
+                self._silent_logger("test_fetch_candidate_pages_prune"),
+                output_path=output_path,
+                reset=False,
+                fetch_page_text_func=fetch_page_text,
+                sleep_func=lambda _: None,
+            )
+
+            saved_df = pd.read_parquet(output_path)
+
+        fetch_page_text.assert_not_called()
+        self.assertTrue(changed)
+        self.assertEqual(result["source_url"].to_list(), ["https://example.org/keep"])
+        self.assertEqual(saved_df["source_url"].to_list(), result["source_url"].to_list())
 
     def test_fetch_candidate_pages_stops_when_quota_callback_is_satisfied(self) -> None:
         candidate_urls_df = pd.DataFrame(
@@ -425,8 +640,7 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
             def stop_when(page_text_df: pd.DataFrame) -> bool:
                 return len(page_text_df) >= 2
 
-            with patch(
-                "scripts.evidence.run_worldwide_sentence_pilot.fetch_page_text",
+            fetch_page_text = Mock(
                 side_effect=lambda url, timeout_seconds: {
                     "url": url,
                     "final_url": url,
@@ -438,17 +652,17 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
                     "extraction_method": "trafilatura",
                     "extraction_error": None,
                 },
-            ) as fetch_page_text, patch(
-                "scripts.evidence.run_worldwide_sentence_pilot.time.sleep"
-            ):
-                result, changed = fetch_candidate_pages(
-                    candidate_urls_df,
-                    self._silent_logger("test_fetch_candidate_pages_early_stop"),
-                    output_path=output_path,
-                    reset=False,
-                    stop_when=stop_when,
-                    stop_check_interval=1,
-                )
+            )
+            result, changed = fetch_candidate_pages(
+                candidate_urls_df,
+                self._silent_logger("test_fetch_candidate_pages_early_stop"),
+                output_path=output_path,
+                reset=False,
+                stop_when=stop_when,
+                stop_check_interval=1,
+                fetch_page_text_func=fetch_page_text,
+                sleep_func=lambda _: None,
+            )
 
         self.assertTrue(changed)
         self.assertEqual(len(result), 2)
@@ -499,8 +713,7 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         with TemporaryDirectory() as temporary_directory:
             output_path = Path(temporary_directory) / "page_text.parquet"
 
-            with patch(
-                "scripts.evidence.run_worldwide_sentence_pilot.fetch_page_text",
+            fetch_page_text = Mock(
                 return_value={
                     "url": "https://example.org/page",
                     "final_url": "https://example.org/page",
@@ -512,15 +725,15 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
                     "extraction_method": "trafilatura",
                     "extraction_error": None,
                 },
-            ) as fetch_page_text, patch(
-                "scripts.evidence.run_worldwide_sentence_pilot.time.sleep"
-            ):
-                result, changed = fetch_candidate_pages(
-                    candidate_urls_df,
-                    self._silent_logger("test_fetch_candidate_pages_pdf_skip"),
-                    output_path=output_path,
-                    reset=False,
-                )
+            )
+            result, changed = fetch_candidate_pages(
+                candidate_urls_df,
+                self._silent_logger("test_fetch_candidate_pages_pdf_skip"),
+                output_path=output_path,
+                reset=False,
+                fetch_page_text_func=fetch_page_text,
+                sleep_func=lambda _: None,
+            )
 
             saved_df = pd.read_parquet(output_path)
 

@@ -23,8 +23,21 @@ class EnglishSentencePilotScriptTests(unittest.TestCase):
 
     def test_build_english_sentence_candidates_keeps_complete_english_polygons(self):
         page_rows = []
+        sentence_terms = [
+            "oak",
+            "pine",
+            "birch",
+            "cedar",
+            "willow",
+            "maple",
+            "beech",
+            "ash",
+            "elm",
+            "spruce",
+        ]
+        polygon_terms = {1: "northern", 2: "southern"}
         for polygon_id in [1, 2]:
-            for url_index in range(10):
+            for url_index, sentence_term in enumerate(sentence_terms):
                 page_rows.append(
                     {
                         "osm_type": "way",
@@ -42,8 +55,8 @@ class EnglishSentencePilotScriptTests(unittest.TestCase):
                         "quality_flags": [],
                         "query_language": "en",
                         "text": (
-                            "The forest contains wetlands and protected wildlife "
-                            f"habitats number {url_index}."
+                            f"The {polygon_terms[polygon_id]} {sentence_term} "
+                            "forest contains wetlands and protected wildlife habitats."
                         ),
                         "query_local_language": "en",
                     }

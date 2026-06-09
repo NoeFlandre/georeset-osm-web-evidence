@@ -22,8 +22,8 @@ class LabelingRunnerTests(unittest.TestCase):
             ]
         )
         responses = {
-            "Prompt for wetlands": "relevant",
-            "Prompt for opening hours": "irrelevant",
+            "Prompt for wetlands": '{"label":"relevant"}',
+            "Prompt for opening hours": '{"label":"irrelevant"}',
         }
         seen_prompts = []
 
@@ -35,7 +35,10 @@ class LabelingRunnerTests(unittest.TestCase):
 
         self.assertEqual(seen_prompts, prompt_df["prompt"].to_list())
         self.assertEqual(labeled_df["llm_label"].to_list(), ["relevant", "irrelevant"])
-        self.assertEqual(labeled_df["raw_response"].to_list(), ["relevant", "irrelevant"])
+        self.assertEqual(
+            labeled_df["raw_response"].to_list(),
+            ['{"label":"relevant"}', '{"label":"irrelevant"}'],
+        )
         self.assertEqual(labeled_df["parse_error"].to_list(), [None, None])
         self.assertEqual(labeled_df["polygon_name"].to_list(), ["Marais Alpha", "Bois Beta"])
 
@@ -50,7 +53,7 @@ class LabelingRunnerTests(unittest.TestCase):
 
         def fake_label_fn(prompt: str) -> str:
             if prompt == "good":
-                return "relevant"
+                return '{"label":"relevant"}'
             if prompt == "messy":
                 return "maybe relevant"
             raise RuntimeError("provider unavailable")
@@ -62,7 +65,7 @@ class LabelingRunnerTests(unittest.TestCase):
 
         self.assertEqual(labeled_df.loc[1, "raw_response"], "maybe relevant")
         self.assertEqual(labeled_df.loc[1, "llm_label"], None)
-        self.assertIn("Expected exactly one label", labeled_df.loc[1, "parse_error"])
+        self.assertIn("Expected JSON object", labeled_df.loc[1, "parse_error"])
 
         self.assertEqual(labeled_df.loc[2, "raw_response"], None)
         self.assertEqual(labeled_df.loc[2, "llm_label"], None)

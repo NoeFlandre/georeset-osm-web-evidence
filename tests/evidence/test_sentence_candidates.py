@@ -5,10 +5,12 @@ import pandas as pd
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     SENTENCE_CANDIDATE_COLUMNS,
     build_sentence_candidate_dataframe,
+    deduplicate_near_duplicate_sentence_candidates,
     filter_english_sentence_candidates,
     limit_sentence_candidates,
     looks_like_english_sentence,
     select_complete_sentence_candidates,
+    sentence_artifact_respects_sampling_limits,
 )
 
 
@@ -72,6 +74,11 @@ class TestEvidenceSentenceCandidate(unittest.TestCase):
         )
         self.assertIn("quality_score", sentence_df.columns)
         self.assertIn("search_queries", sentence_df.columns)
+        self.assertIn("sentence_filter_profile", sentence_df.columns)
+        self.assertEqual(
+            set(sentence_df["sentence_filter_profile"]),
+            {"fineweb_inspired_v1"},
+        )
 
     def test_returns_expected_schema_when_no_sentence_survives(self):
         text_df = pd.DataFrame(
@@ -216,6 +223,101 @@ class TestEvidenceSentenceCandidate(unittest.TestCase):
         self.assertTrue(
             looks_like_english_sentence(
                 "The lake is now managed by the national forestry agency."
+            )
+        )
+
+    def test_deduplicates_near_duplicate_sentences_with_minhash(self):
+        sentence_df = pd.DataFrame(
+            [
+                {
+                    "url": "https://example.org/a",
+                    "sentence": (
+                        "The protected forest contains wetlands and grassland "
+                        "habitats near the river valley today."
+                    ),
+                },
+                {
+                    "url": "https://example.org/b",
+                    "sentence": (
+                        "The protected forest contains wetlands and grassland "
+                        "habitats near the river valley today area."
+                    ),
+                },
+                {
+                    "url": "https://example.org/c",
+                    "sentence": (
+                        "Rice fields are irrigated agricultural landscapes "
+                        "with seasonal flooding."
+                    ),
+                },
+            ]
+        )
+
+        deduplicated_df = deduplicate_near_duplicate_sentence_candidates(
+            sentence_df,
+            similarity_threshold=0.8,
+        )
+
+        self.assertEqual(
+            deduplicated_df["url"].to_list(),
+            ["https://example.org/a", "https://example.org/c"],
+        )
+        self.assertEqual(set(deduplicated_df["deduplication_method"]), {"minhash"})
+
+    def test_sentence_artifact_respects_sampling_limits_and_metadata(self):
+        complete_sentence_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": polygon_index,
+                    "url": (
+                        f"https://example.org/polygon-{polygon_index}/page-{url_index}"
+                    ),
+                    "deduplication_method": "minhash",
+                    "query_language": "en",
+                    "sentence_filter_profile": "fineweb_inspired_v1",
+                }
+                for polygon_index in range(2)
+                for url_index in range(3)
+            ]
+        )
+        missing_profile_df = complete_sentence_df.drop(
+            columns=["sentence_filter_profile"]
+        )
+        missing_language_df = complete_sentence_df.copy()
+        missing_language_df.loc[0, "query_language"] = pd.NA
+        incomplete_sentence_df = complete_sentence_df.head(5)
+
+        self.assertTrue(
+            sentence_artifact_respects_sampling_limits(
+                complete_sentence_df,
+                sentences_per_polygon=3,
+                sentences_per_url=1,
+                target_polygon_count=2,
+            )
+        )
+        self.assertFalse(
+            sentence_artifact_respects_sampling_limits(
+                missing_profile_df,
+                sentences_per_polygon=3,
+                sentences_per_url=1,
+                target_polygon_count=2,
+            )
+        )
+        self.assertFalse(
+            sentence_artifact_respects_sampling_limits(
+                missing_language_df,
+                sentences_per_polygon=3,
+                sentences_per_url=1,
+                target_polygon_count=2,
+            )
+        )
+        self.assertFalse(
+            sentence_artifact_respects_sampling_limits(
+                incomplete_sentence_df,
+                sentences_per_polygon=3,
+                sentences_per_url=1,
+                target_polygon_count=2,
             )
         )
 
