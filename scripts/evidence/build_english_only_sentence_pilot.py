@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -25,6 +24,7 @@ from georeset_osm_web_evidence.pipeline.artifacts import (
     delete_artifacts,
     write_json_artifact,
 )
+from georeset_osm_web_evidence.pipeline.env import get_env_flag, get_env_int
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -49,17 +49,11 @@ COMPLETE_POLYGONS_PATH = OUTPUT_DIR / "complete_sentence_polygons.parquet"
 ANALYSIS_PATH = OUTPUT_DIR / "analysis.json"
 LOG_PATH = OUTPUT_DIR / "run.log"
 
-TARGET_POLYGON_COUNT = int(
-    os.environ.get("ENGLISH_SENTENCE_PILOT_TARGET_POLYGONS", "10")
-)
-SENTENCES_PER_POLYGON = int(
-    os.environ.get("ENGLISH_SENTENCE_PILOT_SENTENCES_PER_POLYGON", "10")
-)
-SENTENCES_PER_URL = int(os.environ.get("ENGLISH_SENTENCE_PILOT_SENTENCES_PER_URL", "1"))
-MAX_URLS_PER_POLYGON = int(
-    os.environ.get("ENGLISH_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "30")
-)
-RESET_OUTPUTS = os.environ.get("ENGLISH_SENTENCE_PILOT_RESET_OUTPUTS", "0") == "1"
+TARGET_POLYGON_COUNT = get_env_int("ENGLISH_SENTENCE_PILOT_TARGET_POLYGONS", 10)
+SENTENCES_PER_POLYGON = get_env_int("ENGLISH_SENTENCE_PILOT_SENTENCES_PER_POLYGON", 10)
+SENTENCES_PER_URL = get_env_int("ENGLISH_SENTENCE_PILOT_SENTENCES_PER_URL", 1)
+MAX_URLS_PER_POLYGON = get_env_int("ENGLISH_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", 30)
+RESET_OUTPUTS = get_env_flag("ENGLISH_SENTENCE_PILOT_RESET_OUTPUTS")
 
 
 def configure_logging() -> logging.Logger:

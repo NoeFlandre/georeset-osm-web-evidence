@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 from pathlib import Path
 
@@ -35,6 +34,11 @@ from georeset_osm_web_evidence.pipeline.artifacts import (
     delete_artifacts,
     write_json_artifact,
 )
+from georeset_osm_web_evidence.pipeline.env import (
+    get_env_flag,
+    get_env_float,
+    get_env_int,
+)
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.dataframe import load_or_build_dataframe
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
@@ -61,7 +65,7 @@ SENTENCE_CANDIDATES_PATH = OUTPUT_DIR / "sentence_candidates.parquet"
 COMPLETE_POLYGONS_PATH = OUTPUT_DIR / "complete_sentence_polygons.parquet"
 ANALYSIS_PATH = OUTPUT_DIR / "analysis.json"
 LOG_PATH = OUTPUT_DIR / "run.log"
-RESET_OUTPUTS = os.environ.get("WORLDWIDE_SENTENCE_PILOT_RESET_OUTPUTS", "0") == "1"
+RESET_OUTPUTS = get_env_flag("WORLDWIDE_SENTENCE_PILOT_RESET_OUTPUTS")
 OUTPUT_ARTIFACT_PATHS = [
     PILOT_POLYGONS_PATH,
     SEARCH_RESULTS_PATH,
@@ -81,37 +85,31 @@ PILOT_REQUIRED_COLUMNS = [
     "has_wikipedia_articles",
 ]
 
-TARGET_COMPLETE_POLYGON_COUNT = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_TARGET_COMPLETE_POLYGONS", "10")
+TARGET_COMPLETE_POLYGON_COUNT = get_env_int(
+    "WORLDWIDE_SENTENCE_PILOT_TARGET_COMPLETE_POLYGONS",
+    10,
 )
-SAMPLE_SIZE = int(
-    os.environ.get(
-        "WORLDWIDE_SENTENCE_PILOT_SAMPLE_SIZE",
-        str(TARGET_COMPLETE_POLYGON_COUNT * 4),
-    )
+SAMPLE_SIZE = get_env_int(
+    "WORLDWIDE_SENTENCE_PILOT_SAMPLE_SIZE",
+    TARGET_COMPLETE_POLYGON_COUNT * 4,
 )
-RESULTS_PER_QUERY = int(os.environ.get("WORLDWIDE_SENTENCE_PILOT_RESULTS_PER_QUERY", "5"))
-MAX_QUERIES_PER_POLYGON = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON", "4")
+RESULTS_PER_QUERY = get_env_int("WORLDWIDE_SENTENCE_PILOT_RESULTS_PER_QUERY", 5)
+MAX_QUERIES_PER_POLYGON = get_env_int(
+    "WORLDWIDE_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON",
+    4,
 )
-MAX_URLS_PER_POLYGON = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "25")
+MAX_URLS_PER_POLYGON = get_env_int("WORLDWIDE_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", 25)
+MAX_SENTENCES_PER_POLYGON = get_env_int(
+    "WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_POLYGON",
+    10,
 )
-MAX_SENTENCES_PER_POLYGON = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_POLYGON", "10")
+MAX_SENTENCES_PER_URL = get_env_int("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_URL", 1)
+SEARCH_DELAY_SECONDS = get_env_float(
+    "WORLDWIDE_SENTENCE_PILOT_SEARCH_DELAY_SECONDS",
+    1.2,
 )
-MAX_SENTENCES_PER_URL = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_MAX_SENTENCES_PER_URL", "1")
-)
-SEARCH_DELAY_SECONDS = float(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_SEARCH_DELAY_SECONDS", "1.2")
-)
-FETCH_DELAY_SECONDS = float(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_DELAY_SECONDS", "1.0")
-)
-FETCH_TIMEOUT_SECONDS = int(
-    os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_TIMEOUT_SECONDS", "10")
-)
+FETCH_DELAY_SECONDS = get_env_float("WORLDWIDE_SENTENCE_PILOT_FETCH_DELAY_SECONDS", 1.0)
+FETCH_TIMEOUT_SECONDS = get_env_int("WORLDWIDE_SENTENCE_PILOT_FETCH_TIMEOUT_SECONDS", 10)
 
 
 def configure_logging() -> logging.Logger:

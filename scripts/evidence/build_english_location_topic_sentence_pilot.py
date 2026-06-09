@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +38,11 @@ from georeset_osm_web_evidence.labeling.requests import (
 from georeset_osm_web_evidence.pipeline.artifacts import (
     delete_artifacts,
     write_json_artifact,
+)
+from georeset_osm_web_evidence.pipeline.env import (
+    get_env_flag,
+    get_env_float,
+    get_env_int,
 )
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
@@ -80,28 +84,26 @@ FINAL_ANALYSIS_PATH = OUTPUT_DIR / "final_analysis.json"
 COMPLETION_REJECTED_POLYGONS_PATH = OUTPUT_DIR / "completion_rejected_polygons.parquet"
 LOG_PATH = OUTPUT_DIR / "run.log"
 
-TARGET_POLYGON_COUNT = int(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_TARGET_POLYGONS", "10")
+TARGET_POLYGON_COUNT = get_env_int("LOCATION_TOPIC_SENTENCE_PILOT_TARGET_POLYGONS", 10)
+SENTENCES_PER_POLYGON = get_env_int(
+    "LOCATION_TOPIC_SENTENCE_PILOT_SENTENCES_PER_POLYGON",
+    10,
 )
-SENTENCES_PER_POLYGON = int(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_SENTENCES_PER_POLYGON", "10")
+SENTENCES_PER_URL = get_env_int("LOCATION_TOPIC_SENTENCE_PILOT_SENTENCES_PER_URL", 1)
+MAX_QUERIES_PER_POLYGON = get_env_int(
+    "LOCATION_TOPIC_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON",
+    4,
 )
-SENTENCES_PER_URL = int(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_SENTENCES_PER_URL", "1")
+MAX_URLS_PER_POLYGON = get_env_int(
+    "LOCATION_TOPIC_SENTENCE_PILOT_MAX_URLS_PER_POLYGON",
+    30,
 )
-MAX_QUERIES_PER_POLYGON = int(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_MAX_QUERIES_PER_POLYGON", "4")
+RESULTS_PER_QUERY = get_env_int("LOCATION_TOPIC_SENTENCE_PILOT_RESULTS_PER_QUERY", 20)
+REQUEST_DELAY_SECONDS = get_env_float(
+    "LOCATION_TOPIC_SENTENCE_PILOT_REQUEST_DELAY_SECONDS",
+    1.2,
 )
-MAX_URLS_PER_POLYGON = int(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_MAX_URLS_PER_POLYGON", "30")
-)
-RESULTS_PER_QUERY = int(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_RESULTS_PER_QUERY", "20")
-)
-REQUEST_DELAY_SECONDS = float(
-    os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_REQUEST_DELAY_SECONDS", "1.2")
-)
-RESET_OUTPUTS = os.environ.get("LOCATION_TOPIC_SENTENCE_PILOT_RESET_OUTPUTS", "0") == "1"
+RESET_OUTPUTS = get_env_flag("LOCATION_TOPIC_SENTENCE_PILOT_RESET_OUTPUTS")
 
 
 def configure_logging() -> logging.Logger:
