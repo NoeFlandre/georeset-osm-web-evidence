@@ -4,45 +4,21 @@ from georeset_osm_web_evidence.search.config import (
     BRAVE_CANDIDATE_URLS_PATH,
     BRAVE_RESULTS_PATH,
 )
-
-
-def is_wikipedia_url(url: str) -> bool:
-    return "wikipedia.org" in url.lower()
-
-
-def combine_unique_values(values) -> list[str]:
-    return sorted({value for value in values if isinstance(value, str) and value})
+from georeset_osm_web_evidence.search.results import (
+    is_wikipedia_url,
+    prepare_candidate_urls,
+)
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 
 
 def main() -> None:
     results_df = pd.read_parquet(BRAVE_RESULTS_PATH)
     raw_result_count = len(results_df)
     results_df = results_df[~results_df["url"].apply(is_wikipedia_url)].copy()
-
-    candidate_urls_df = (
-        results_df.sort_values("rank")
-        .groupby(
-            [
-                "osm_type",
-                "osm_id",
-                "polygon_name",
-                "has_wikipedia_articles",
-                "provider",
-                "url",
-            ],
-            as_index=False,
-        )
-        .agg(
-            best_rank=("rank", "min"),
-            title=("title", "first"),
-            description=("description", "first"),
-            queries=("query", combine_unique_values),
-        )
-    )
+    candidate_urls_df = prepare_candidate_urls(results_df)
 
     output_path = BRAVE_CANDIDATE_URLS_PATH
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    candidate_urls_df.to_parquet(output_path, index=False)
+    write_dataframe_artifact(candidate_urls_df, output_path)
 
     print(f"Loaded {raw_result_count} search result rows from {BRAVE_RESULTS_PATH}")
     print(f"Kept {len(results_df)} rows after removing Wikipedia URLs")

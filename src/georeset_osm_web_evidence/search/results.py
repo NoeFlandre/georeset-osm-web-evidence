@@ -1,5 +1,15 @@
 from datetime import datetime, timezone
 
+import pandas as pd
+
+
+def is_wikipedia_url(url: str) -> bool:
+    return "wikipedia.org" in url.lower()
+
+
+def combine_unique_values(values) -> list[str]:
+    return sorted({value for value in values if isinstance(value, str) and value})
+
 
 def result_to_row(
     polygon_row,
@@ -37,3 +47,30 @@ def attempt_to_row(
         "attempted_at": datetime.now(timezone.utc).isoformat(),
         "result_count": result_count,
     }
+
+
+def prepare_candidate_urls(search_results_df: pd.DataFrame) -> pd.DataFrame:
+    filtered_df = search_results_df[
+        ~search_results_df["url"].apply(is_wikipedia_url)
+    ].copy()
+
+    return (
+        filtered_df.sort_values("rank")
+        .groupby(
+            [
+                "osm_type",
+                "osm_id",
+                "polygon_name",
+                "has_wikipedia_articles",
+                "provider",
+                "url",
+            ],
+            as_index=False,
+        )
+        .agg(
+            best_rank=("rank", "min"),
+            title=("title", "first"),
+            description=("description", "first"),
+            queries=("query", combine_unique_values),
+        )
+    )

@@ -2,6 +2,9 @@ import unittest
 from datetime import datetime
 from types import SimpleNamespace
 
+import pandas as pd
+
+import georeset_osm_web_evidence.search.results as search_results
 from georeset_osm_web_evidence.search.results import (
     attempt_to_row,
     result_to_row,
@@ -69,6 +72,65 @@ class SearchResultsTests(unittest.TestCase):
 
         attempted_at = datetime.fromisoformat(row["attempted_at"])
         self.assertIsNotNone(attempted_at.tzinfo)
+
+    def test_prepares_candidate_urls_without_wikipedia_and_with_query_provenance(self):
+        search_results_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Bois Alpha",
+                    "has_wikipedia_articles": False,
+                    "provider": "brave",
+                    "url": "https://example.com/forest",
+                    "rank": 3,
+                    "title": "Later title",
+                    "description": "Later description",
+                    "query": '"Bois Alpha" "France" "forest"',
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Bois Alpha",
+                    "has_wikipedia_articles": False,
+                    "provider": "brave",
+                    "url": "https://example.com/forest",
+                    "rank": 1,
+                    "title": "Best title",
+                    "description": "Best description",
+                    "query": '"Bois Alpha" "France" "wood"',
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Bois Alpha",
+                    "has_wikipedia_articles": False,
+                    "provider": "brave",
+                    "url": "https://en.wikipedia.org/wiki/Bois_Alpha",
+                    "rank": 2,
+                    "title": "Wikipedia",
+                    "description": "Filtered",
+                    "query": '"Bois Alpha" "France" "forest"',
+                },
+            ]
+        )
+
+        self.assertTrue(hasattr(search_results, "prepare_candidate_urls"))
+
+        candidate_urls_df = search_results.prepare_candidate_urls(search_results_df)
+
+        self.assertEqual(len(candidate_urls_df), 1)
+        self.assertEqual(candidate_urls_df.loc[0, "url"], "https://example.com/forest")
+        self.assertEqual(candidate_urls_df.loc[0, "best_rank"], 1)
+        self.assertEqual(candidate_urls_df.loc[0, "title"], "Best title")
+        self.assertEqual(candidate_urls_df.loc[0, "description"], "Best description")
+        self.assertEqual(
+            candidate_urls_df.loc[0, "queries"],
+            [
+                '"Bois Alpha" "France" "forest"',
+                '"Bois Alpha" "France" "wood"',
+            ],
+        )
 
 
 if __name__ == "__main__":
