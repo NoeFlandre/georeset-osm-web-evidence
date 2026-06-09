@@ -141,6 +141,19 @@ def write_labeling_prompt_jsonl(
     )
 
 
+def format_labeling_prompt_artifact_summary(
+    prompt_df: pd.DataFrame,
+    parquet_output_path: str | Path,
+    jsonl_output_path: str | Path,
+    row_description: str = "LLM labeling request",
+) -> str:
+    return (
+        f"Saved {len(prompt_df)} {row_description} rows to "
+        f"{Path(parquet_output_path)}\n"
+        f"Saved JSONL prompts to {Path(jsonl_output_path)}"
+    )
+
+
 def build_and_write_labeling_prompt_artifacts(
     input_path: str | Path,
     parquet_output_path: str | Path,

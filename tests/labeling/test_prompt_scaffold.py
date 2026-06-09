@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
+import georeset_osm_web_evidence.labeling.requests as labeling_requests
 from georeset_osm_web_evidence.labeling.parser import parse_binary_label_response
 from georeset_osm_web_evidence.labeling.prompt import (
     LOCATION_AWARE_PROMPT_VERSION,
@@ -326,6 +327,39 @@ class LabelingPromptScaffoldTests(unittest.TestCase):
         self.assertEqual(prompt_df.loc[0, "sentence_id"], "s1")
         self.assertEqual(saved_df.loc[0, "sentence_id"], "s1")
         self.assertEqual(jsonl_rows[0]["sentence_id"], "s1")
+
+    def test_formats_labeling_prompt_artifact_summary(self):
+        prompt_df = pd.DataFrame([{"sentence_id": "s1"}, {"sentence_id": "s2"}])
+
+        self.assertTrue(
+            hasattr(labeling_requests, "format_labeling_prompt_artifact_summary")
+        )
+        summary = labeling_requests.format_labeling_prompt_artifact_summary(
+            prompt_df=prompt_df,
+            parquet_output_path="requests.parquet",
+            jsonl_output_path="requests.jsonl",
+        )
+
+        self.assertEqual(
+            summary,
+            "Saved 2 LLM labeling request rows to requests.parquet\n"
+            "Saved JSONL prompts to requests.jsonl",
+        )
+
+        english_pilot_summary = (
+            labeling_requests.format_labeling_prompt_artifact_summary(
+                prompt_df=prompt_df,
+                parquet_output_path=Path("pilot") / "requests.parquet",
+                jsonl_output_path=Path("pilot") / "requests.jsonl",
+                row_description="English-pilot LLM request",
+            )
+        )
+
+        self.assertEqual(
+            english_pilot_summary,
+            "Saved 2 English-pilot LLM request rows to pilot/requests.parquet\n"
+            "Saved JSONL prompts to pilot/requests.jsonl",
+        )
 
 
 if __name__ == "__main__":
