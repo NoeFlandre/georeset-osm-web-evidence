@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from georeset_osm_web_evidence.review.artifacts import write_review_artifacts
 from georeset_osm_web_evidence.review.human import (
     build_human_review_dataframe,
     save_human_review_xlsx,
@@ -16,9 +17,12 @@ def main() -> None:
     page_text_df = pd.read_parquet(input_path)
     review_df = build_human_review_dataframe(page_text_df)
 
-    csv_output_path.parent.mkdir(parents=True, exist_ok=True)
-    review_df.to_csv(csv_output_path, index=False)
-    save_human_review_xlsx(review_df, str(xlsx_output_path))
+    write_review_artifacts(
+        review_df,
+        csv_output_path=csv_output_path,
+        xlsx_output_path=xlsx_output_path,
+        workbook_writer=save_human_review_xlsx,
+    )
 
     print(f"Saved {len(review_df)} review rows to {csv_output_path}")
     print(f"Saved reviewer workbook to {xlsx_output_path}")
