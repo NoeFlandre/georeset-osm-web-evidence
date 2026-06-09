@@ -1,8 +1,11 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 
 from georeset_osm_web_evidence.evidence.summary import summarize_polygon_evidence
+import scripts.evidence.summarize_polygon_evidence as summarize_script
 
 
 class EvidenceSummaryTests(unittest.TestCase):
@@ -106,6 +109,62 @@ class EvidenceSummaryTests(unittest.TestCase):
         self.assertEqual(row["successful_fetch_count"], 2)
         self.assertEqual(row["high_quality_page_count"], 1)
         self.assertTrue(row["has_high_quality_evidence"])
+
+    def test_builds_polygon_evidence_summary_artifact(self):
+        polygons_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "polygon_name": "Forest A",
+                    "has_wikipedia_articles": False,
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 2,
+                    "polygon_name": "Forest B",
+                    "has_wikipedia_articles": True,
+                },
+            ]
+        )
+        page_text_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "source_url": "https://example.test/a",
+                    "fetch_error": None,
+                    "quality_score": 0.9,
+                }
+            ]
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            polygons_path = temp_path / "polygons.parquet"
+            page_text_path = temp_path / "page_text.parquet"
+            output_path = temp_path / "nested" / "summary.parquet"
+            polygons_df.to_parquet(polygons_path, index=False)
+            page_text_df.to_parquet(page_text_path, index=False)
+
+            self.assertTrue(
+                hasattr(summarize_script, "run_polygon_evidence_summary_build")
+            )
+            summary_df = summarize_script.run_polygon_evidence_summary_build(
+                polygons_df_input_path=polygons_path,
+                page_text_df_input_path=page_text_path,
+                output_path=output_path,
+                high_quality_threshold=0.8,
+            )
+
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(len(summary_df), 2)
+        self.assertEqual(saved_df.columns.to_list(), summary_df.columns.to_list())
+        self.assertEqual(saved_df.loc[0, "candidate_url_count"], 1)
+        self.assertTrue(saved_df.loc[0, "has_high_quality_evidence"])
+        self.assertEqual(saved_df.loc[1, "candidate_url_count"], 0)
+        self.assertFalse(saved_df.loc[1, "has_high_quality_evidence"])
 
 
 if __name__ == "__main__":
