@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import geopandas as gpd
@@ -34,6 +33,7 @@ from georeset_osm_web_evidence.osm.worldwide_extract_configs import (
     SKIP_DISCOVERED_EXTRACT_IDS,
     configured_world_regions,
 )
+from georeset_osm_web_evidence.pipeline.env import get_env_flag, get_env_int
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.viz.map import create_polygon_map
 
@@ -60,22 +60,15 @@ MAX_PER_BBOX = 1
 MAX_PER_COUNTRY = 150
 SPARSITY_DISTANCE_KM_STEPS = [100, 80, 60, 40, 25]
 SPATIAL_CELL_SIZE_DEGREES = 0.5
-MAX_EXTRACTS_PER_RUN = int(os.environ.get("WORLDWIDE_OSM_MAX_EXTRACTS_PER_RUN", "12"))
-MAX_DISCOVERED_EXTRACTS = int(
-    os.environ.get("WORLDWIDE_OSM_MAX_DISCOVERED_EXTRACTS", "240")
+MAX_EXTRACTS_PER_RUN = get_env_int("WORLDWIDE_OSM_MAX_EXTRACTS_PER_RUN", 12)
+MAX_DISCOVERED_EXTRACTS = get_env_int("WORLDWIDE_OSM_MAX_DISCOVERED_EXTRACTS", 240)
+MAX_EXTRACT_DOWNLOAD_BYTES = get_env_int(
+    "WORLDWIDE_OSM_MAX_EXTRACT_DOWNLOAD_BYTES",
+    300_000_000,
 )
-MAX_EXTRACT_DOWNLOAD_BYTES = int(
-    os.environ.get("WORLDWIDE_OSM_MAX_EXTRACT_DOWNLOAD_BYTES", "300000000")
-)
-KEEP_DOWNLOADED_EXTRACTS = (
-    os.environ.get("WORLDWIDE_OSM_KEEP_DOWNLOADED_EXTRACTS", "0") == "1"
-)
-RENDER_INTERMEDIATE_MAPS = (
-    os.environ.get("WORLDWIDE_OSM_RENDER_INTERMEDIATE_MAPS", "0") == "1"
-)
-SAMPLE_CHECKPOINT_INTERVAL = int(
-    os.environ.get("WORLDWIDE_OSM_SAMPLE_CHECKPOINT_INTERVAL", "10")
-)
+KEEP_DOWNLOADED_EXTRACTS = get_env_flag("WORLDWIDE_OSM_KEEP_DOWNLOADED_EXTRACTS")
+RENDER_INTERMEDIATE_MAPS = get_env_flag("WORLDWIDE_OSM_RENDER_INTERMEDIATE_MAPS")
+SAMPLE_CHECKPOINT_INTERVAL = get_env_int("WORLDWIDE_OSM_SAMPLE_CHECKPOINT_INTERVAL", 10)
 
 TOOLTIP_COLUMNS = [
     "polygon_name",

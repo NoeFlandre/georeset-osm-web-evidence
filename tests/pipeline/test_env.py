@@ -24,6 +24,13 @@ class PipelineEnvTests(unittest.TestCase):
         self.assertEqual(get_env_flag("DISABLED", env=env), False)
         self.assertEqual(get_env_flag("MISSING_FLAG", env=env), False)
 
+    def test_typed_environment_errors_name_the_invalid_variable(self) -> None:
+        with self.assertRaisesRegex(ValueError, "COUNT"):
+            get_env_int("COUNT", 5, env={"COUNT": "many"})
+
+        with self.assertRaisesRegex(ValueError, "DELAY"):
+            get_env_float("DELAY", 0.5, env={"DELAY": "slow"})
+
 
 if __name__ == "__main__":
     unittest.main()

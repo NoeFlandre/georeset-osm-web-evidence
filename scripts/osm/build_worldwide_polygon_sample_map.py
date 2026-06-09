@@ -1,4 +1,3 @@
-import os
 import time
 from pathlib import Path
 
@@ -29,6 +28,7 @@ from georeset_osm_web_evidence.osm.worldwide import (
     filter_named_environmental_polygons,
     sample_worldwide_polygons,
 )
+from georeset_osm_web_evidence.pipeline.env import get_env_float, get_env_int
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.viz.map import create_polygon_map
 
@@ -48,12 +48,11 @@ SAMPLE_SIZE = compute_sample_size(
 )
 MAX_PER_BBOX = 1
 MAX_PER_COUNTRY = 100
-REQUEST_PAUSE_SECONDS = float(
-    os.environ.get("WORLDWIDE_OSM_REQUEST_PAUSE_SECONDS", "1.5")
-)
+REQUEST_PAUSE_SECONDS = get_env_float("WORLDWIDE_OSM_REQUEST_PAUSE_SECONDS", 1.5)
 SPARSITY_DISTANCE_KM_STEPS = [100, 80, 60, 40, 25]
-MAX_MISSING_BBOX_FETCHES_PER_RUN = int(
-    os.environ.get("WORLDWIDE_OSM_MAX_BBOX_FETCHES_PER_RUN", "250")
+MAX_MISSING_BBOX_FETCHES_PER_RUN = get_env_int(
+    "WORLDWIDE_OSM_MAX_BBOX_FETCHES_PER_RUN",
+    250,
 )
 
 TOOLTIP_COLUMNS = [

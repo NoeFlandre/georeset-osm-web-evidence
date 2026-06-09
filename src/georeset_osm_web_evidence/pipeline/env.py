@@ -9,7 +9,11 @@ def get_env_int(
     env: Mapping[str, str] | None = None,
 ) -> int:
     source = os.environ if env is None else env
-    return int(source.get(name, str(default)))
+    value = source.get(name, str(default))
+    try:
+        return int(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from error
 
 
 def get_env_float(
@@ -19,7 +23,11 @@ def get_env_float(
     env: Mapping[str, str] | None = None,
 ) -> float:
     source = os.environ if env is None else env
-    return float(source.get(name, str(default)))
+    value = source.get(name, str(default))
+    try:
+        return float(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a float, got {value!r}") from error
 
 
 def get_env_flag(
