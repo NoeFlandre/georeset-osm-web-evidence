@@ -17,6 +17,7 @@ from georeset_osm_web_evidence.labeling.llama_cpp import (
     load_llama_cpp_model,
 )
 from georeset_osm_web_evidence.labeling.llama_cpp_batch import (
+    format_llm_labeling_summary,
     run_llama_cpp_prompt_batch,
 )
 from scripts.labeling.run_llama_cpp_labeling_sample import (
@@ -265,6 +266,24 @@ class LlamaCppProviderTests(unittest.TestCase):
 
         self.assertEqual(labeled_df["sentence_id"].to_list(), ["s1"])
         self.assertEqual(saved_df["sentence_id"].to_list(), ["s1"])
+
+    def test_formats_llm_labeling_summary(self):
+        labeled_df = pd.DataFrame(
+            [
+                {"llm_label": "relevant", "parse_error": None},
+                {"llm_label": "irrelevant", "parse_error": None},
+                {"llm_label": None, "parse_error": "invalid json"},
+            ]
+        )
+
+        summary = format_llm_labeling_summary(labeled_df, Path("labels.parquet"))
+
+        self.assertIn("Saved 3 LLM-labeled rows to labels.parquet", summary)
+        self.assertIn("llm_label", summary)
+        self.assertIn("relevant", summary)
+        self.assertIn("irrelevant", summary)
+        self.assertIn("parse_error", summary)
+        self.assertIn("invalid json", summary)
 
     def test_english_pilot_script_labels_all_rows_by_default(self):
         prompt_df = pd.DataFrame(

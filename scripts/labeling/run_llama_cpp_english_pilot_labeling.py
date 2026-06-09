@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from georeset_osm_web_evidence.labeling.llama_cpp_batch import (
+    format_llm_labeling_summary,
     run_llama_cpp_prompt_batch,
 )
 
@@ -32,10 +33,7 @@ def run_llama_cpp_english_pilot_labeling(
 def main() -> None:
     labeled_df = run_llama_cpp_english_pilot_labeling()
 
-    print(f"Saved {len(labeled_df)} LLM-labeled rows to {DEFAULT_OUTPUT_PATH}")
-    print(labeled_df["llm_label"].value_counts(dropna=False))
-    if "parse_error" in labeled_df.columns:
-        print(labeled_df["parse_error"].value_counts(dropna=False))
+    print(format_llm_labeling_summary(labeled_df, DEFAULT_OUTPUT_PATH))
 
 
 if __name__ == "__main__":

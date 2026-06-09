@@ -11,6 +11,20 @@ from georeset_osm_web_evidence.labeling.llama_cpp import (
 from georeset_osm_web_evidence.labeling.runner import label_prompt_rows
 
 
+def format_llm_labeling_summary(
+    labeled_df: pd.DataFrame,
+    output_path: str | Path,
+) -> str:
+    parts = [
+        f"Saved {len(labeled_df)} LLM-labeled rows to {Path(output_path)}",
+        str(labeled_df["llm_label"].value_counts(dropna=False)),
+    ]
+    if "parse_error" in labeled_df.columns:
+        parts.append(str(labeled_df["parse_error"].value_counts(dropna=False)))
+
+    return "\n".join(parts)
+
+
 def run_llama_cpp_prompt_batch(
     input_path: str | Path,
     output_path: str | Path,
