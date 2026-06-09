@@ -17,7 +17,13 @@ from georeset_osm_web_evidence.search.coverage import (
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.queries import get_osm_name
-from georeset_osm_web_evidence.search.results import attempt_to_row, result_to_row
+from georeset_osm_web_evidence.search.results import (
+    attempt_to_row,
+    merge_search_attempts,
+    merge_search_results,
+    result_to_row,
+)
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 from georeset_osm_web_evidence.storage.local import load_geodataframe
 
 
@@ -118,27 +124,14 @@ def main() -> None:
 
     output_path = BRAVE_RESULTS_PATH
     attempts_path = BRAVE_ATTEMPTS_PATH
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    attempts_path.parent.mkdir(parents=True, exist_ok=True)
 
     new_results_df = pd.DataFrame(rows, columns=existing_results_df.columns)
-    results_df = pd.concat([existing_results_df, new_results_df], ignore_index=True)
-    results_df = results_df.drop_duplicates(
-        subset=["osm_type", "osm_id", "query", "url"],
-        keep="first",
-    )
-    results_df.to_parquet(output_path, index=False)
+    results_df = merge_search_results(existing_results_df, new_results_df)
+    write_dataframe_artifact(results_df, output_path)
 
     new_attempts_df = pd.DataFrame(attempt_rows, columns=existing_attempts_df.columns)
-    attempts_df = pd.concat(
-        [existing_attempts_df, new_attempts_df],
-        ignore_index=True,
-    )
-    attempts_df = attempts_df.drop_duplicates(
-        subset=["osm_type", "osm_id", "query"],
-        keep="first",
-    )
-    attempts_df.to_parquet(attempts_path, index=False)
+    attempts_df = merge_search_attempts(existing_attempts_df, new_attempts_df)
+    write_dataframe_artifact(attempts_df, attempts_path)
 
     print(f"Collected {len(new_results_df)} new search results")
     print(f"Saved {len(results_df)} total search results to {output_path}")

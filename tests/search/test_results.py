@@ -132,6 +132,89 @@ class SearchResultsTests(unittest.TestCase):
             ],
         )
 
+    def test_merges_search_results_and_attempts_without_replacing_existing_rows(self):
+        existing_results_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "query": '"Forest A" forest',
+                    "url": "https://example.com/a",
+                    "title": "Existing title",
+                }
+            ]
+        )
+        new_results_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "query": '"Forest A" forest',
+                    "url": "https://example.com/a",
+                    "title": "New duplicate title",
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "query": '"Forest A" forest',
+                    "url": "https://example.com/b",
+                    "title": "New title",
+                },
+            ]
+        )
+        existing_attempts_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "query": '"Forest A" forest',
+                    "result_count": 1,
+                }
+            ]
+        )
+        new_attempts_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "query": '"Forest A" forest',
+                    "result_count": 2,
+                },
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "query": '"Forest A" biodiversity',
+                    "result_count": 3,
+                },
+            ]
+        )
+
+        self.assertTrue(hasattr(search_results, "merge_search_results"))
+        self.assertTrue(hasattr(search_results, "merge_search_attempts"))
+        merged_results_df = search_results.merge_search_results(
+            existing_results_df,
+            new_results_df,
+        )
+        merged_attempts_df = search_results.merge_search_attempts(
+            existing_attempts_df,
+            new_attempts_df,
+        )
+
+        self.assertEqual(
+            merged_results_df[["url", "title"]].to_dict("records"),
+            [
+                {"url": "https://example.com/a", "title": "Existing title"},
+                {"url": "https://example.com/b", "title": "New title"},
+            ],
+        )
+        self.assertEqual(
+            merged_attempts_df[["query", "result_count"]].to_dict("records"),
+            [
+                {"query": '"Forest A" forest', "result_count": 1},
+                {"query": '"Forest A" biodiversity', "result_count": 3},
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
