@@ -17,6 +17,16 @@ def append_unique_rows(
     )
 
 
+def write_dataframe_artifact(
+    dataframe: pd.DataFrame,
+    path: str | Path,
+) -> pd.DataFrame:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    dataframe.to_parquet(path, index=False)
+    return dataframe
+
+
 def load_or_build_dataframe(
     path: Path,
     stage_name: str,
@@ -32,9 +42,8 @@ def load_or_build_dataframe(
         return dataframe
 
     dataframe = build()
-    path.parent.mkdir(parents=True, exist_ok=True)
     if save is None:
-        dataframe.to_parquet(path, index=False)
+        write_dataframe_artifact(dataframe, path)
     else:
         save(dataframe, path)
     logger.info("Saved %s rows for %s to %s", len(dataframe), stage_name, path)

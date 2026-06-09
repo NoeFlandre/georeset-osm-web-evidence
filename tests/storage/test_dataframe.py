@@ -8,6 +8,7 @@ import pandas as pd
 from georeset_osm_web_evidence.storage.dataframe import (
     append_unique_rows,
     load_or_build_dataframe,
+    write_dataframe_artifact,
 )
 
 
@@ -80,6 +81,20 @@ class DataFrameStorageTests(unittest.TestCase):
 
         self.assertEqual(result["value"].to_list(), ["rebuilt"])
         self.assertEqual(saved_df["value"].to_list(), ["rebuilt"])
+
+    def test_write_dataframe_artifact_creates_parent_and_omits_index(self) -> None:
+        dataframe = pd.DataFrame([{"value": "fresh"}], index=[42])
+
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "nested" / "artifact.parquet"
+
+            result = write_dataframe_artifact(dataframe, path)
+
+            saved_df = pd.read_parquet(path)
+
+        self.assertIs(result, dataframe)
+        self.assertEqual(saved_df.columns.to_list(), ["value"])
+        self.assertEqual(saved_df["value"].to_list(), ["fresh"])
 
 
 if __name__ == "__main__":

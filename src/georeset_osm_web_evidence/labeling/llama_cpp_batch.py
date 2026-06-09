@@ -9,6 +9,7 @@ from georeset_osm_web_evidence.labeling.llama_cpp import (
     load_llama_cpp_model,
 )
 from georeset_osm_web_evidence.labeling.runner import label_prompt_rows
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 
 
 def format_llm_labeling_summary(
@@ -51,7 +52,6 @@ def run_llama_cpp_prompt_batch(
 
     labeled_df = label_prompt_rows(prompt_df, label_fn)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    labeled_df.to_parquet(output_path, index=False)
+    write_dataframe_artifact(labeled_df, output_path)
 
     return labeled_df

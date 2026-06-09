@@ -11,6 +11,7 @@ from georeset_osm_web_evidence.labeling.prompt import (
     build_location_aware_binary_label_prompt,
 )
 from georeset_osm_web_evidence.pipeline.artifacts import write_jsonl_artifact
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 
 LABELING_OUTPUT_COLUMNS = [
     "sentence_id",
@@ -152,8 +153,7 @@ def build_and_write_labeling_prompt_artifacts(
     source_df = pd.read_parquet(input_path)
     prompt_df = prompt_builder(source_df)
 
-    parquet_output_path.parent.mkdir(parents=True, exist_ok=True)
-    prompt_df.to_parquet(parquet_output_path, index=False)
+    write_dataframe_artifact(prompt_df, parquet_output_path)
     write_labeling_prompt_jsonl(prompt_df, jsonl_output_path)
 
     return prompt_df
