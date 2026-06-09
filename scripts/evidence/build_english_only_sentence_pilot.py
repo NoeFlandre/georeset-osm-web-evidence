@@ -22,6 +22,7 @@ from georeset_osm_web_evidence.evidence.page_text import (
     PAGE_TEXT_COLUMNS,
     fetch_candidate_pages,
 )
+from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
     SENTENCE_FILTER_PROFILE,
@@ -59,21 +60,7 @@ RESET_OUTPUTS = os.environ.get("ENGLISH_SENTENCE_PILOT_RESET_OUTPUTS", "0") == "
 
 
 def configure_logging() -> logging.Logger:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("english_sentence_pilot")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    file_handler = logging.FileHandler(LOG_PATH, mode="w")
-    file_handler.setFormatter(formatter)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-
-    return logger
+    return configure_stage_logger("english_sentence_pilot", LOG_PATH)
 
 
 def filter_english_candidate_urls(candidate_urls_df: pd.DataFrame) -> pd.DataFrame:

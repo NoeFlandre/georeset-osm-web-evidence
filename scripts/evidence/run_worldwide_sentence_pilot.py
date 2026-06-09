@@ -32,6 +32,7 @@ from georeset_osm_web_evidence.evidence.worldwide_pilot import (
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
+from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.dataframe import load_or_build_dataframe
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -108,22 +109,10 @@ FETCH_DELAY_SECONDS = float(
 FETCH_TIMEOUT_SECONDS = int(
     os.environ.get("WORLDWIDE_SENTENCE_PILOT_FETCH_TIMEOUT_SECONDS", "10")
 )
+
+
 def configure_logging() -> logging.Logger:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("worldwide_sentence_pilot")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    file_handler = logging.FileHandler(LOG_PATH, mode="w")
-    file_handler.setFormatter(formatter)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-
-    return logger
+    return configure_stage_logger("worldwide_sentence_pilot", LOG_PATH)
 
 
 def reset_output_artifacts() -> None:
