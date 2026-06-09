@@ -452,7 +452,7 @@ def load_or_build_sentence_candidates(
         logger.info("Rebuilding sentence candidates because sampling limits changed")
 
     sentence_df = build_pilot_sentence_candidates(page_text_with_quality_df, pilot_gdf)
-    sentence_df.to_parquet(path, index=False)
+    write_dataframe_artifact(sentence_df, path)
     logger.info("Saved %s rows for sentence candidates to %s", len(sentence_df), path)
 
     return sentence_df

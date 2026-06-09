@@ -267,6 +267,47 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
             result["quality_score"].to_list(),
         )
 
+    def test_load_or_build_sentence_candidates_creates_parent_directory(self) -> None:
+        built_sentence_df = pd.DataFrame(
+            [
+                {
+                    "osm_type": "way",
+                    "osm_id": 1,
+                    "url": "https://example.org/page",
+                    "sentence": "The forest contains wetlands and grassland habitats.",
+                }
+            ],
+            index=[42],
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = (
+                Path(temporary_directory)
+                / "nested"
+                / "sentence_candidates.parquet"
+            )
+
+            with patch(
+                "scripts.evidence.run_worldwide_sentence_pilot.build_pilot_sentence_candidates",
+                return_value=built_sentence_df,
+            ):
+                result = pilot_script.load_or_build_sentence_candidates(
+                    path=output_path,
+                    page_text_with_quality_df=pd.DataFrame([{"text": "unused"}]),
+                    pilot_gdf=self._pilot_dataframe(),
+                    logger=self._silent_logger("test_sentence_candidates_parent"),
+                    reset=True,
+                )
+
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertIs(result, built_sentence_df)
+        self.assertEqual(saved_df.index.to_list(), [0])
+        self.assertEqual(
+            saved_df.to_dict("records"),
+            built_sentence_df.to_dict("records"),
+        )
+
     def test_load_or_collect_search_results_reports_when_it_rebuilds(self) -> None:
         pilot_df = self._pilot_dataframe()
 
