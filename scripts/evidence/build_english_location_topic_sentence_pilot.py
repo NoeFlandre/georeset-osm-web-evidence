@@ -1,21 +1,33 @@
 import json
 import logging
 import os
-import time
-import unicodedata
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 
+from georeset_osm_web_evidence.evidence.completion_candidates import (
+    order_completion_candidates,
+    polygon_keys,
+)
+from georeset_osm_web_evidence.evidence.english_sentences import (
+    build_english_sentence_candidates,
+)
+from georeset_osm_web_evidence.evidence.final_url_artifacts import (
+    select_exact_url_artifacts,
+    validate_exact_sentence_url_counts,
+)
+from georeset_osm_web_evidence.evidence.location_topic_search import (
+    build_location_topic_search_artifacts,
+    search_location_topic_for_polygon,
+)
 from georeset_osm_web_evidence.evidence.page_text import fetch_candidate_pages
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     sentence_artifact_respects_sampling_limits,
+    MINHASH_DUPLICATE_THRESHOLD,
 )
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     attach_polygon_metadata,
     build_candidate_urls,
-    build_search_rows_for_query,
     filter_to_sentence_polygons,
     summarize_sentence_pilot,
 )
@@ -23,18 +35,12 @@ from georeset_osm_web_evidence.labeling.requests import (
     build_location_aware_sentence_candidate_prompt_rows,
     write_labeling_prompt_jsonl,
 )
-from georeset_osm_web_evidence.search.providers import search_brave
-from georeset_osm_web_evidence.search.queries import (
-    build_location_topic_english_search_queries,
-)
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
-from georeset_osm_web_evidence.web.quality import add_quality_metadata
-from scripts.evidence.build_english_only_sentence_pilot import (
-    MINHASH_DUPLICATE_THRESHOLD,
+from georeset_osm_web_evidence.text.sentences import (
     SENTENCE_FILTER_PROFILE,
     SENTENCE_FILTER_RULES,
-    build_english_sentence_candidates,
 )
+from georeset_osm_web_evidence.web.quality import add_quality_metadata
 
 
 ENGLISH_ONLY_OUTPUT_DIR = Path(
@@ -109,65 +115,6 @@ def configure_logging() -> logging.Logger:
     return logger
 
 
-def build_location_topic_search_artifacts(
-    pilot_gdf: pd.DataFrame,
-    search_func: Callable[..., list[dict]] = search_brave,
-    sleep_func: Callable[[float], None] = time.sleep,
-    results_per_query: int = RESULTS_PER_QUERY,
-    request_delay_seconds: float = REQUEST_DELAY_SECONDS,
-    logger: logging.Logger | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    rows = []
-    attempt_rows = []
-
-    for polygon_index, polygon_row in enumerate(pilot_gdf.itertuples(), start=1):
-        queries = build_location_topic_english_search_queries(
-            osm_tags=polygon_row.osm_tags,
-            country=polygon_row.country,
-            world_region=polygon_row.world_region,
-            source_extract_id=polygon_row.source_extract_id,
-            polygon_category=polygon_row.polygon_category,
-            max_queries=MAX_QUERIES_PER_POLYGON,
-        )
-
-        if logger is not None:
-            logger.info(
-                "Searching polygon %s/%s: %s (%s location-topic queries)",
-                polygon_index,
-                len(pilot_gdf),
-                polygon_row.polygon_name,
-                len(queries),
-            )
-
-        for query in queries:
-            search_error = None
-            try:
-                results = search_func(
-                    query,
-                    count=results_per_query,
-                    country="US",
-                    search_lang="en",
-                )
-            except Exception as error:
-                results = []
-                search_error = str(error)
-                if logger is not None:
-                    logger.warning("Search failed for %s: %s", query, search_error)
-
-            result_rows, attempt_row = build_search_rows_for_query(
-                polygon_row=polygon_row,
-                query_language="en",
-                query=query,
-                results=results,
-                search_error=search_error,
-            )
-            rows.extend(result_rows)
-            attempt_rows.append(attempt_row)
-            sleep_func(request_delay_seconds)
-
-    return pd.DataFrame(rows), pd.DataFrame(attempt_rows)
-
-
 def run_location_topic_labeling_request_build(
     input_path: str | Path = SENTENCE_CANDIDATES_PATH,
     parquet_output_path: str | Path = LLM_REQUESTS_PARQUET_PATH,
@@ -187,240 +134,11 @@ def run_location_topic_labeling_request_build(
     return prompt_df
 
 
-def _sentence_url_counts(sentence_df: pd.DataFrame) -> pd.DataFrame:
-    return (
-        sentence_df.groupby(["osm_type", "osm_id"], dropna=False)
-        .agg(sentence_count=("sentence", "size"), url_count=("url", "nunique"))
-        .reset_index()
-    )
-
-
-def validate_exact_sentence_url_counts(
-    sentence_df: pd.DataFrame,
-    urls_per_polygon: int,
-) -> None:
-    counts_df = _sentence_url_counts(sentence_df)
-    invalid_counts_df = counts_df[
-        (counts_df["sentence_count"] != urls_per_polygon)
-        | (counts_df["url_count"] != urls_per_polygon)
-    ]
-
-    if not invalid_counts_df.empty:
-        raise ValueError(
-            "Selected sentence artifact does not have exactly "
-            f"{urls_per_polygon} sentences and URLs per polygon: "
-            f"{invalid_counts_df.to_dict('records')}"
-        )
-
-
-def select_exact_url_artifacts(
-    sentence_df: pd.DataFrame,
-    candidate_urls_df: pd.DataFrame,
-    page_text_df: pd.DataFrame,
-    urls_per_polygon: int,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    validate_exact_sentence_url_counts(sentence_df, urls_per_polygon=urls_per_polygon)
-
-    sentence_urls_df = sentence_df[["osm_type", "osm_id", "url"]].drop_duplicates()
-    selected_candidate_urls_df = sentence_urls_df.merge(
-        candidate_urls_df,
-        on=["osm_type", "osm_id", "url"],
-        how="left",
-    )
-    page_text_keys_df = sentence_urls_df.rename(columns={"url": "source_url"})
-    selected_page_text_df = page_text_keys_df.merge(
-        page_text_df,
-        on=["osm_type", "osm_id", "source_url"],
-        how="left",
-    )
-
-    if selected_candidate_urls_df["best_rank"].isna().any():
-        raise ValueError("Some selected sentence URLs are missing from candidate URLs")
-    if selected_page_text_df["source_url"].isna().any():
-        raise ValueError("Some selected sentence URLs are missing from page text")
-
-    return selected_candidate_urls_df, selected_page_text_df
-
-
-def _polygon_keys(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return pd.DataFrame(columns=["osm_type", "osm_id"])
-
-    return df[["osm_type", "osm_id"]].drop_duplicates()
-
-
 def _metadata_ready(source_df: pd.DataFrame) -> bool:
     return all(
         column in source_df.columns
         for column in ["polygon_name", "polygon_category", "query_local_language"]
     )
-
-
-def _name_quality_score(name: object) -> int:
-    if not isinstance(name, str):
-        return -100
-
-    normalized_name = " ".join(name.lower().split())
-    generic_names = {
-        "group of trees",
-        "rice",
-        "savannah",
-        "forest",
-        "wood",
-        "woods",
-        "wetland",
-        "meadow",
-    }
-    if normalized_name in generic_names:
-        return -50
-
-    score = len(normalized_name)
-    if " " in normalized_name:
-        score += 20
-    if any(character.isdigit() for character in normalized_name):
-        score -= 10
-
-    return score
-
-
-def _has_osm_knowledge_graph_tag(osm_tags: object) -> int:
-    if not isinstance(osm_tags, dict):
-        return 0
-
-    for key in ["wikipedia", "wikidata"]:
-        value = osm_tags.get(key)
-        if isinstance(value, str) and value.strip():
-            return 1
-
-    return 0
-
-
-def _latin_name_score(name: object) -> int:
-    if not isinstance(name, str) or not name.strip():
-        return 0
-
-    letters = [character for character in name if character.isalpha()]
-    if not letters:
-        return 0
-
-    latin_letters = [
-        character
-        for character in letters
-        if "LATIN" in unicodedata.name(character, "")
-    ]
-
-    return int(len(latin_letters) / len(letters) >= 0.7)
-
-
-def _high_yield_place_name_score(name: object) -> int:
-    if not isinstance(name, str):
-        return 0
-
-    normalized_name = name.lower()
-    high_yield_terms = [
-        "national park",
-        "wildlife refuge",
-        "nature reserve",
-        "bird sanctuary",
-        "conservation park",
-        "state park",
-        "provincial park",
-        "natural reserve",
-        "wildlife management area",
-    ]
-
-    return int(any(term in normalized_name for term in high_yield_terms))
-
-
-def order_completion_candidates(
-    source_df: pd.DataFrame,
-    complete_df: pd.DataFrame,
-    attempted_df: pd.DataFrame,
-) -> pd.DataFrame:
-    complete_keys_df = _polygon_keys(complete_df)
-    attempted_keys_df = _polygon_keys(attempted_df)
-    excluded_keys_df = pd.concat(
-        [complete_keys_df, attempted_keys_df],
-        ignore_index=True,
-    ).drop_duplicates()
-
-    if excluded_keys_df.empty:
-        remaining_df = source_df.copy()
-    else:
-        remaining_df = source_df.merge(
-            excluded_keys_df.assign(_exclude=True),
-            on=["osm_type", "osm_id"],
-            how="left",
-        )
-        remaining_df = remaining_df[remaining_df["_exclude"].isna()].drop(
-            columns=["_exclude"]
-        )
-
-    region_counts = complete_df["world_region"].value_counts().to_dict()
-    area_bin_counts = complete_df["area_size_bin"].value_counts().to_dict()
-    attempted_metadata_df = _polygon_keys(attempted_df).merge(
-        source_df[["osm_type", "osm_id", "world_region", "area_size_bin"]],
-        on=["osm_type", "osm_id"],
-        how="left",
-    )
-    attempted_region_counts = (
-        attempted_metadata_df["world_region"].value_counts().to_dict()
-    )
-    attempted_area_bin_counts = (
-        attempted_metadata_df["area_size_bin"].value_counts().to_dict()
-    )
-    result = remaining_df.copy()
-    result["_region_score"] = (
-        result["world_region"].map(region_counts).fillna(0)
-        + result["world_region"].map(attempted_region_counts).fillna(0) * 0.25
-    )
-    result["_area_bin_score"] = (
-        result["area_size_bin"].map(area_bin_counts).fillna(0)
-        + result["area_size_bin"].map(attempted_area_bin_counts).fillna(0) * 0.1
-    )
-    result["_english_local_score"] = (
-        result.get("query_local_language", pd.Series(index=result.index))
-        .eq("en")
-        .astype(int)
-    )
-    result["_knowledge_graph_score"] = (
-        result["osm_tags"].apply(_has_osm_knowledge_graph_tag)
-        if "osm_tags" in result.columns
-        else 0
-    )
-    result["_latin_name_score"] = result["polygon_name"].apply(_latin_name_score)
-    result["_high_yield_name_score"] = result["polygon_name"].apply(
-        _high_yield_place_name_score
-    )
-    result["_name_quality"] = result["polygon_name"].apply(_name_quality_score)
-
-    result = result.sort_values(
-        [
-            "_high_yield_name_score",
-            "_knowledge_graph_score",
-            "_english_local_score",
-            "_latin_name_score",
-            "_region_score",
-            "_area_bin_score",
-            "_name_quality",
-            "world_region",
-            "area_size_bin",
-            "polygon_name",
-        ],
-        ascending=[False, False, False, False, True, True, False, True, True, True],
-    )
-
-    return result.drop(
-        columns=[
-            "_region_score",
-            "_area_bin_score",
-            "_english_local_score",
-            "_knowledge_graph_score",
-            "_latin_name_score",
-            "_high_yield_name_score",
-            "_name_quality",
-        ]
-    ).reset_index(drop=True)
 
 
 def load_completion_source_polygons() -> pd.DataFrame:
@@ -487,54 +205,6 @@ def _empty_search_attempts() -> pd.DataFrame:
             "search_error",
         ]
     )
-
-
-def search_one_polygon(
-    polygon_row,
-    search_func: Callable[..., list[dict]] = search_brave,
-    sleep_func: Callable[[float], None] = time.sleep,
-    results_per_query: int = RESULTS_PER_QUERY,
-    request_delay_seconds: float = REQUEST_DELAY_SECONDS,
-    logger: logging.Logger | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    queries = build_location_topic_english_search_queries(
-        osm_tags=polygon_row.osm_tags,
-        country=polygon_row.country,
-        world_region=polygon_row.world_region,
-        source_extract_id=polygon_row.source_extract_id,
-        polygon_category=polygon_row.polygon_category,
-        max_queries=MAX_QUERIES_PER_POLYGON,
-    )
-    rows = []
-    attempt_rows = []
-
-    for query in queries:
-        search_error = None
-        try:
-            results = search_func(
-                query,
-                count=results_per_query,
-                country="US",
-                search_lang="en",
-            )
-        except Exception as error:
-            results = []
-            search_error = str(error)
-            if logger is not None:
-                logger.warning("Search failed for %s: %s", query, search_error)
-
-        result_rows, attempt_row = build_search_rows_for_query(
-            polygon_row=polygon_row,
-            query_language="en",
-            query=query,
-            results=results,
-            search_error=search_error,
-        )
-        rows.extend(result_rows)
-        attempt_rows.append(attempt_row)
-        sleep_func(request_delay_seconds)
-
-    return pd.DataFrame(rows), pd.DataFrame(attempt_rows)
 
 
 def build_complete_sentences_for_single_polygon(
@@ -618,7 +288,7 @@ def complete_location_topic_pilot(
     page_text_df = final_page_text_df.copy()
     page_text_with_quality_df = final_page_text_with_quality_df.copy()
 
-    while len(_polygon_keys(complete_df)) < target_polygon_count:
+    while len(polygon_keys(complete_df)) < target_polygon_count:
         candidates_df = order_completion_candidates(
             source_df=source_df,
             complete_df=complete_df,
@@ -630,15 +300,18 @@ def complete_location_topic_pilot(
         polygon_row = next(candidates_df.itertuples())
         logger.info(
             "Trying completion polygon %s/%s: %s (%s, %s)",
-            len(_polygon_keys(complete_df)) + 1,
+            len(polygon_keys(complete_df)) + 1,
             target_polygon_count,
             polygon_row.polygon_name,
             polygon_row.world_region,
             polygon_row.area_size_bin,
         )
 
-        new_results_df, new_attempts_df = search_one_polygon(
+        new_results_df, new_attempts_df = search_location_topic_for_polygon(
             polygon_row,
+            max_queries_per_polygon=MAX_QUERIES_PER_POLYGON,
+            results_per_query=RESULTS_PER_QUERY,
+            request_delay_seconds=REQUEST_DELAY_SECONDS,
             logger=logger,
         )
         search_results_df = _append_unique_rows(
@@ -912,6 +585,9 @@ def main() -> None:
     else:
         search_results_df, search_attempts_df = build_location_topic_search_artifacts(
             pilot_gdf,
+            max_queries_per_polygon=MAX_QUERIES_PER_POLYGON,
+            results_per_query=RESULTS_PER_QUERY,
+            request_delay_seconds=REQUEST_DELAY_SECONDS,
             logger=logger,
         )
         search_results_df.to_parquet(SEARCH_RESULTS_PATH, index=False)

@@ -8,6 +8,12 @@ from typing import Callable
 import pandas as pd
 
 from georeset_osm_web_evidence.evidence.page_text import fetch_candidate_pages
+from georeset_osm_web_evidence.evidence.english_sentences import (
+    build_english_sentence_candidates,
+)
+from georeset_osm_web_evidence.evidence.sentence_candidates import (
+    MINHASH_DUPLICATE_THRESHOLD,
+)
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     attach_polygon_metadata,
     build_candidate_urls,
@@ -24,13 +30,11 @@ from georeset_osm_web_evidence.search.queries import (
     build_contextual_english_search_queries,
 )
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
-from georeset_osm_web_evidence.web.quality import add_quality_metadata
-from scripts.evidence.build_english_only_sentence_pilot import (
-    MINHASH_DUPLICATE_THRESHOLD,
+from georeset_osm_web_evidence.text.sentences import (
     SENTENCE_FILTER_PROFILE,
     SENTENCE_FILTER_RULES,
-    build_english_sentence_candidates,
 )
+from georeset_osm_web_evidence.web.quality import add_quality_metadata
 
 
 ENGLISH_ONLY_OUTPUT_DIR = Path(
