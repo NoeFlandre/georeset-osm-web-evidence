@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from pathlib import Path
@@ -22,6 +21,7 @@ from georeset_osm_web_evidence.evidence.page_text import (
     PAGE_TEXT_COLUMNS,
     fetch_candidate_pages,
 )
+from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -99,11 +99,6 @@ def seed_page_text_from_base_cache(
             seeded_df[column] = pd.NA
 
     return seeded_df[PAGE_TEXT_COLUMNS].reset_index(drop=True)
-
-
-def write_analysis(analysis: dict, logger: logging.Logger) -> None:
-    ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
-    logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
 
 
 def main() -> None:
@@ -197,7 +192,7 @@ def main() -> None:
             "sentence_filter_rules": list(SENTENCE_FILTER_RULES),
         }
     )
-    write_analysis(analysis, logger)
+    write_json_artifact(ANALYSIS_PATH, analysis, logger=logger, log_label="Analysis")
     logger.info("English-only sentence pilot finished")
 
 

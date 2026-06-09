@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from pathlib import Path
@@ -37,6 +36,7 @@ from georeset_osm_web_evidence.labeling.requests import (
     build_location_aware_sentence_candidate_prompt_rows,
     write_labeling_prompt_jsonl,
 )
+from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.storage.dataframe import append_unique_rows
@@ -393,7 +393,7 @@ def complete_location_topic_pilot(
             "llm_prompt_rows": int(len(prompt_df)),
         }
     )
-    FINAL_ANALYSIS_PATH.write_text(json.dumps(final_analysis, indent=2, sort_keys=True))
+    write_json_artifact(FINAL_ANALYSIS_PATH, final_analysis)
 
     return final_analysis
 
@@ -450,14 +450,9 @@ def finalize_existing_location_topic_outputs(
             "sentences_per_url": SENTENCES_PER_URL,
         }
     )
-    FINAL_ANALYSIS_PATH.write_text(json.dumps(final_analysis, indent=2, sort_keys=True))
+    write_json_artifact(FINAL_ANALYSIS_PATH, final_analysis)
 
     return final_analysis
-
-
-def write_analysis(analysis: dict, logger: logging.Logger) -> None:
-    ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
-    logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
 
 
 def reset_outputs() -> None:
@@ -562,7 +557,12 @@ def main() -> None:
     final_analysis = finalize_existing_location_topic_outputs(
         urls_per_polygon=SENTENCES_PER_POLYGON,
     )
-    logger.info("Final exact URL analysis: %s", json.dumps(final_analysis, sort_keys=True))
+    write_json_artifact(
+        FINAL_ANALYSIS_PATH,
+        final_analysis,
+        logger=logger,
+        log_label="Final exact URL analysis",
+    )
 
     analysis = summarize_sentence_pilot(
         polygons_df=complete_pilot_gdf,
@@ -590,7 +590,7 @@ def main() -> None:
             "sentence_filter_rules": list(SENTENCE_FILTER_RULES),
         }
     )
-    write_analysis(analysis, logger)
+    write_json_artifact(ANALYSIS_PATH, analysis, logger=logger, log_label="Analysis")
     logger.info("English location-topic sentence pilot finished")
 
 

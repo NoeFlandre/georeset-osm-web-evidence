@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import time
@@ -32,6 +31,7 @@ from georeset_osm_web_evidence.evidence.worldwide_pilot import (
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
+from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.dataframe import load_or_build_dataframe
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
@@ -456,14 +456,6 @@ def save_complete_sentence_polygons(
     return complete_pilot_gdf
 
 
-def write_analysis(
-    analysis: dict,
-    logger: logging.Logger,
-) -> None:
-    ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
-    logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
-
-
 def main() -> None:
     logger = configure_logging()
     if RESET_OUTPUTS:
@@ -571,7 +563,7 @@ def main() -> None:
             "sentence_filter_rules": list(SENTENCE_FILTER_RULES),
         }
     )
-    write_analysis(analysis, logger)
+    write_json_artifact(ANALYSIS_PATH, analysis, logger=logger, log_label="Analysis")
     logger.info("Worldwide sentence pilot finished")
 
 

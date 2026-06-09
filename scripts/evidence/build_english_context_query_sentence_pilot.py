@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from pathlib import Path
@@ -26,6 +25,7 @@ from georeset_osm_web_evidence.labeling.requests import (
     build_sentence_candidate_prompt_rows,
     write_labeling_prompt_jsonl,
 )
+from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -101,11 +101,6 @@ def run_context_pilot_labeling_request_build(
     write_labeling_prompt_jsonl(prompt_df, jsonl_output_path)
 
     return prompt_df
-
-
-def write_analysis(analysis: dict, logger: logging.Logger) -> None:
-    ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
-    logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
 
 
 def reset_outputs() -> None:
@@ -227,7 +222,7 @@ def main() -> None:
             "sentence_filter_rules": list(SENTENCE_FILTER_RULES),
         }
     )
-    write_analysis(analysis, logger)
+    write_json_artifact(ANALYSIS_PATH, analysis, logger=logger, log_label="Analysis")
     logger.info("English context-query sentence pilot finished")
 
 
