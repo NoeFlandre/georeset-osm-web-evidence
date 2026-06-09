@@ -38,6 +38,7 @@ from georeset_osm_web_evidence.labeling.requests import (
     write_labeling_prompt_jsonl,
 )
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
+from georeset_osm_web_evidence.storage.dataframe import append_unique_rows
 from georeset_osm_web_evidence.text.sentences import (
     SENTENCE_FILTER_PROFILE,
     SENTENCE_FILTER_RULES,
@@ -153,18 +154,6 @@ def load_completion_source_polygons() -> pd.DataFrame:
     return add_pilot_metadata(source_gdf)
 
 
-def _append_unique_rows(
-    existing_df: pd.DataFrame,
-    new_df: pd.DataFrame,
-    subset: list[str],
-) -> pd.DataFrame:
-    return (
-        pd.concat([existing_df, new_df], ignore_index=True)
-        .drop_duplicates(subset=subset, keep="first")
-        .reset_index(drop=True)
-    )
-
-
 def _candidate_temp_path(polygon_row) -> Path:
     return OUTPUT_DIR / f"_tmp_page_text_{polygon_row.osm_type}_{polygon_row.osm_id}.parquet"
 
@@ -276,12 +265,12 @@ def complete_location_topic_pilot(
             request_delay_seconds=REQUEST_DELAY_SECONDS,
             logger=logger,
         )
-        search_results_df = _append_unique_rows(
+        search_results_df = append_unique_rows(
             search_results_df,
             new_results_df,
             subset=["osm_type", "osm_id", "query", "url"],
         )
-        search_attempts_df = _append_unique_rows(
+        search_attempts_df = append_unique_rows(
             search_attempts_df,
             new_attempts_df,
             subset=["osm_type", "osm_id", "query"],
