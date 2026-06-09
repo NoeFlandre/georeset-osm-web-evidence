@@ -7,10 +7,10 @@ import pandas as pd
 
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     MINHASH_DUPLICATE_THRESHOLD,
-    sentence_artifact_respects_sampling_limits,
 )
 from georeset_osm_web_evidence.evidence.english_sentences import (
     build_english_sentence_candidates,
+    english_sentence_quota_is_satisfied,
 )
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     attach_polygon_metadata,
@@ -114,30 +114,6 @@ def seed_page_text_from_base_cache(
     return seeded_df[PAGE_TEXT_COLUMNS].reset_index(drop=True)
 
 
-def english_sentence_quota_is_satisfied(
-    page_text_df: pd.DataFrame,
-    pilot_gdf: pd.DataFrame,
-) -> bool:
-    if page_text_df.empty:
-        return False
-
-    page_text_with_quality_df = add_quality_metadata(page_text_df)
-    sentence_df = build_english_sentence_candidates(
-        page_text_with_quality_df,
-        pilot_gdf,
-        target_polygon_count=TARGET_POLYGON_COUNT,
-        sentences_per_polygon=SENTENCES_PER_POLYGON,
-        sentences_per_url=SENTENCES_PER_URL,
-    )
-
-    return sentence_artifact_respects_sampling_limits(
-        sentence_df,
-        sentences_per_polygon=SENTENCES_PER_POLYGON,
-        sentences_per_url=SENTENCES_PER_URL,
-        target_polygon_count=TARGET_POLYGON_COUNT,
-    )
-
-
 def write_analysis(analysis: dict, logger: logging.Logger) -> None:
     ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
     logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
@@ -185,6 +161,9 @@ def main() -> None:
         stop_when=lambda dataframe: english_sentence_quota_is_satisfied(
             dataframe,
             pilot_gdf,
+            target_polygon_count=TARGET_POLYGON_COUNT,
+            sentences_per_polygon=SENTENCES_PER_POLYGON,
+            sentences_per_url=SENTENCES_PER_URL,
         ),
     )
     logger.info("English page rows: %s", len(page_text_df))

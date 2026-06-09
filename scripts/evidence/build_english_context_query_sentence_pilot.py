@@ -10,6 +10,7 @@ import pandas as pd
 from georeset_osm_web_evidence.evidence.page_text import fetch_candidate_pages
 from georeset_osm_web_evidence.evidence.english_sentences import (
     build_english_sentence_candidates,
+    english_sentence_quota_is_satisfied,
 )
 from georeset_osm_web_evidence.evidence.sentence_candidates import (
     MINHASH_DUPLICATE_THRESHOLD,
@@ -178,25 +179,6 @@ def run_context_pilot_labeling_request_build(
     return prompt_df
 
 
-def english_sentence_quota_is_satisfied(
-    page_text_df: pd.DataFrame,
-    pilot_gdf: pd.DataFrame,
-) -> bool:
-    if page_text_df.empty:
-        return False
-
-    page_text_with_quality_df = add_quality_metadata(page_text_df)
-    sentence_df = build_english_sentence_candidates(
-        page_text_with_quality_df,
-        pilot_gdf,
-        target_polygon_count=TARGET_POLYGON_COUNT,
-        sentences_per_polygon=SENTENCES_PER_POLYGON,
-        sentences_per_url=SENTENCES_PER_URL,
-    )
-
-    return len(sentence_df) == TARGET_POLYGON_COUNT * SENTENCES_PER_POLYGON
-
-
 def write_analysis(analysis: dict, logger: logging.Logger) -> None:
     ANALYSIS_PATH.write_text(json.dumps(analysis, indent=2, sort_keys=True))
     logger.info("Analysis: %s", json.dumps(analysis, sort_keys=True))
@@ -263,6 +245,9 @@ def main() -> None:
         stop_when=lambda dataframe: english_sentence_quota_is_satisfied(
             dataframe,
             pilot_gdf,
+            target_polygon_count=TARGET_POLYGON_COUNT,
+            sentences_per_polygon=SENTENCES_PER_POLYGON,
+            sentences_per_url=SENTENCES_PER_URL,
         ),
     )
     logger.info("Page text rows: %s", len(page_text_df))
