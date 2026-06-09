@@ -40,7 +40,10 @@ from georeset_osm_web_evidence.pipeline.env import (
     get_env_int,
 )
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
-from georeset_osm_web_evidence.storage.dataframe import load_or_build_dataframe
+from georeset_osm_web_evidence.storage.dataframe import (
+    load_or_build_dataframe,
+    write_dataframe_artifact,
+)
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
     SENTENCE_FILTER_PROFILE,
@@ -328,6 +331,18 @@ def build_candidate_url_artifacts(
     return candidate_urls_df, fetch_urls_df
 
 
+def write_candidate_url_artifacts(
+    candidate_urls_df: pd.DataFrame,
+    fetch_urls_df: pd.DataFrame,
+    candidate_urls_path: Path,
+    fetch_urls_path: Path,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return (
+        write_dataframe_artifact(candidate_urls_df, candidate_urls_path),
+        write_dataframe_artifact(fetch_urls_df, fetch_urls_path),
+    )
+
+
 def load_or_build_candidate_url_artifacts(
     search_results_df: pd.DataFrame,
     pilot_gdf: pd.DataFrame,
@@ -359,8 +374,12 @@ def load_or_build_candidate_url_artifacts(
         search_results_df,
         pilot_gdf,
     )
-    candidate_urls_df.to_parquet(CANDIDATE_URLS_PATH, index=False)
-    fetch_urls_df.to_parquet(FETCH_URLS_PATH, index=False)
+    write_candidate_url_artifacts(
+        candidate_urls_df,
+        fetch_urls_df,
+        CANDIDATE_URLS_PATH,
+        FETCH_URLS_PATH,
+    )
     logger.info(
         "Saved %s candidate URLs to %s",
         len(candidate_urls_df),

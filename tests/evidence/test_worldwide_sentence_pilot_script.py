@@ -11,6 +11,7 @@ from georeset_osm_web_evidence.evidence.page_text import (
     fetch_candidate_pages,
     page_text_quality_artifact_is_usable,
 )
+from scripts.evidence import run_worldwide_sentence_pilot as pilot_script
 from scripts.evidence.run_worldwide_sentence_pilot import (
     build_pilot_sentence_candidates,
     collect_search_results,
@@ -136,6 +137,51 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
             self.assertTrue(
                 search_attempts_cover_expected_queries(complete_attempts_df, pilot_df)
             )
+
+    def test_write_candidate_url_artifacts_writes_related_dataframes_without_indexes(
+        self,
+    ) -> None:
+        self.assertTrue(hasattr(pilot_script, "write_candidate_url_artifacts"))
+
+        candidate_urls_df = pd.DataFrame(
+            [{"url": "https://example.org/all", "best_rank": 1}],
+            index=[42],
+        )
+        fetch_urls_df = pd.DataFrame(
+            [{"url": "https://example.org/fetch", "best_rank": 2}],
+            index=[99],
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            candidate_urls_path = (
+                Path(temporary_directory) / "nested" / "candidate_urls.parquet"
+            )
+            fetch_urls_path = Path(temporary_directory) / "nested" / "fetch_urls.parquet"
+
+            result_candidate_urls_df, result_fetch_urls_df = (
+                pilot_script.write_candidate_url_artifacts(
+                    candidate_urls_df,
+                    fetch_urls_df,
+                    candidate_urls_path,
+                    fetch_urls_path,
+                )
+            )
+
+            saved_candidate_urls_df = pd.read_parquet(candidate_urls_path)
+            saved_fetch_urls_df = pd.read_parquet(fetch_urls_path)
+
+        self.assertIs(result_candidate_urls_df, candidate_urls_df)
+        self.assertIs(result_fetch_urls_df, fetch_urls_df)
+        self.assertEqual(
+            saved_candidate_urls_df.to_dict("records"),
+            candidate_urls_df.to_dict("records"),
+        )
+        self.assertEqual(
+            saved_fetch_urls_df.to_dict("records"),
+            fetch_urls_df.to_dict("records"),
+        )
+        self.assertEqual(saved_candidate_urls_df.index.to_list(), [0])
+        self.assertEqual(saved_fetch_urls_df.index.to_list(), [0])
 
     def test_load_or_collect_search_results_reports_when_it_rebuilds(self) -> None:
         pilot_df = self._pilot_dataframe()
