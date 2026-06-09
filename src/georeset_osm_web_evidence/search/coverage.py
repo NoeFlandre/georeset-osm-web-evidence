@@ -219,3 +219,31 @@ def choose_unsearched_polygons(
         )
 
     return selected_df.head(polygon_limit)
+
+
+def choose_polygons_to_search(
+    polygons_df: pd.DataFrame,
+    existing_results_df: pd.DataFrame,
+    existing_attempts_df: pd.DataFrame,
+    new_polygon_limit: int,
+    complete_existing_polygons_only: bool,
+) -> pd.DataFrame:
+    if not complete_existing_polygons_only:
+        return choose_unsearched_polygons(
+            polygons_df,
+            existing_results_df,
+            polygon_limit=new_polygon_limit,
+            attempted_polygons_df=existing_attempts_df,
+        )
+
+    treated_parts = []
+    for dataframe in [existing_results_df, existing_attempts_df]:
+        if not dataframe.empty:
+            treated_parts.append(polygon_keys(dataframe))
+
+    if not treated_parts:
+        return polygons_df.head(0).copy()
+
+    treated_keys = pd.concat(treated_parts, ignore_index=True).drop_duplicates()
+
+    return polygons_df.merge(treated_keys, on=POLYGON_KEY, how="inner")

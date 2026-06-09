@@ -10,7 +10,7 @@ from georeset_osm_web_evidence.search.config import (
 )
 from georeset_osm_web_evidence.search.coverage import (
     build_expected_query_table,
-    choose_unsearched_polygons,
+    choose_polygons_to_search,
     find_missing_queries,
     load_existing_search_attempts,
     load_existing_search_results,
@@ -25,32 +25,6 @@ from georeset_osm_web_evidence.search.results import (
 )
 from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 from georeset_osm_web_evidence.storage.local import load_geodataframe
-
-
-def choose_polygons_to_search(
-    polygons_df: pd.DataFrame,
-    existing_results_df: pd.DataFrame,
-    existing_attempts_df: pd.DataFrame,
-    new_polygon_limit: int,
-    complete_existing_polygons_only: bool,
-) -> pd.DataFrame:
-    if not complete_existing_polygons_only:
-        return choose_unsearched_polygons(
-            polygons_df,
-            existing_results_df,
-            polygon_limit=new_polygon_limit,
-            attempted_polygons_df=existing_attempts_df,
-        )
-
-    treated_keys = pd.concat(
-        [
-            existing_results_df[["osm_type", "osm_id"]],
-            existing_attempts_df[["osm_type", "osm_id"]],
-        ],
-        ignore_index=True,
-    ).drop_duplicates()
-
-    return polygons_df.merge(treated_keys, on=["osm_type", "osm_id"], how="inner")
 
 
 def main() -> None:

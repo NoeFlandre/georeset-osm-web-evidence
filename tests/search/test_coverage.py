@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
+import georeset_osm_web_evidence.search.coverage as coverage
 from georeset_osm_web_evidence.search.coverage import (
     build_expected_query_table,
     choose_unsearched_polygons,
@@ -208,6 +209,56 @@ class SearchCoverageTests(unittest.TestCase):
         )
 
         self.assertTrue(selected.empty)
+
+    def test_choose_polygons_to_search_can_complete_existing_polygons_only(self):
+        polygons = pd.DataFrame(
+            [
+                {"osm_type": "way", "osm_id": 1, "has_wikipedia_articles": True},
+                {"osm_type": "way", "osm_id": 2, "has_wikipedia_articles": False},
+                {"osm_type": "relation", "osm_id": 3, "has_wikipedia_articles": True},
+            ]
+        )
+        existing_results = pd.DataFrame([{"osm_type": "way", "osm_id": 1}])
+        existing_attempts = pd.DataFrame([{"osm_type": "relation", "osm_id": 3}])
+
+        self.assertTrue(hasattr(coverage, "choose_polygons_to_search"))
+        selected = coverage.choose_polygons_to_search(
+            polygons,
+            existing_results,
+            existing_attempts,
+            new_polygon_limit=10,
+            complete_existing_polygons_only=True,
+        )
+
+        self.assertEqual(
+            selected[["osm_type", "osm_id"]].to_dict("records"),
+            [
+                {"osm_type": "way", "osm_id": 1},
+                {"osm_type": "relation", "osm_id": 3},
+            ],
+        )
+
+    def test_choose_polygons_to_search_selects_unsearched_polygons_when_not_completing(self):
+        polygons = pd.DataFrame(
+            [
+                {"osm_type": "way", "osm_id": 1, "has_wikipedia_articles": True},
+                {"osm_type": "way", "osm_id": 2, "has_wikipedia_articles": False},
+                {"osm_type": "way", "osm_id": 3, "has_wikipedia_articles": True},
+            ]
+        )
+        existing_results = pd.DataFrame([{"osm_type": "way", "osm_id": 1}])
+        existing_attempts = pd.DataFrame([{"osm_type": "way", "osm_id": 2}])
+
+        self.assertTrue(hasattr(coverage, "choose_polygons_to_search"))
+        selected = coverage.choose_polygons_to_search(
+            polygons,
+            existing_results,
+            existing_attempts,
+            new_polygon_limit=2,
+            complete_existing_polygons_only=False,
+        )
+
+        self.assertEqual(selected["osm_id"].to_list(), [3])
 
 
 if __name__ == "__main__":
