@@ -18,6 +18,8 @@ from georeset_osm_web_evidence.evidence.final_url_artifacts import (
 )
 from georeset_osm_web_evidence.evidence.location_topic_search import (
     build_location_topic_search_artifacts,
+    empty_location_topic_search_attempts,
+    empty_location_topic_search_results,
     search_location_topic_for_polygon,
 )
 from georeset_osm_web_evidence.evidence.page_text import fetch_candidate_pages
@@ -167,46 +169,6 @@ def _candidate_temp_path(polygon_row) -> Path:
     return OUTPUT_DIR / f"_tmp_page_text_{polygon_row.osm_type}_{polygon_row.osm_id}.parquet"
 
 
-def _empty_search_results() -> pd.DataFrame:
-    return pd.DataFrame(
-        columns=[
-            "osm_type",
-            "osm_id",
-            "polygon_name",
-            "has_wikipedia_articles",
-            "query",
-            "provider",
-            "rank",
-            "title",
-            "url",
-            "description",
-            "query_language",
-            "world_region",
-            "country",
-            "local_language",
-            "query_local_language",
-            "area_size_bin",
-            "polygon_category",
-        ]
-    )
-
-
-def _empty_search_attempts() -> pd.DataFrame:
-    return pd.DataFrame(
-        columns=[
-            "osm_type",
-            "osm_id",
-            "polygon_name",
-            "has_wikipedia_articles",
-            "query",
-            "attempted_at",
-            "result_count",
-            "query_language",
-            "search_error",
-        ]
-    )
-
-
 def build_complete_sentences_for_single_polygon(
     candidate_urls_df: pd.DataFrame,
     pilot_row_df: pd.DataFrame,
@@ -259,12 +221,12 @@ def complete_location_topic_pilot(
     search_results_df = (
         pd.read_parquet(SEARCH_RESULTS_PATH)
         if SEARCH_RESULTS_PATH.exists()
-        else _empty_search_results()
+        else empty_location_topic_search_results()
     )
     search_attempts_df = (
         pd.read_parquet(SEARCH_ATTEMPTS_PATH)
         if SEARCH_ATTEMPTS_PATH.exists()
-        else _empty_search_attempts()
+        else empty_location_topic_search_attempts()
     )
 
     final_candidate_urls_df, final_page_text_df = select_exact_url_artifacts(

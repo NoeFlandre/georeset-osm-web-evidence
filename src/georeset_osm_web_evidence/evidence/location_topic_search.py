@@ -13,6 +13,46 @@ from georeset_osm_web_evidence.search.queries import (
 )
 
 
+SEARCH_RESULT_COLUMNS = [
+    "osm_type",
+    "osm_id",
+    "polygon_name",
+    "has_wikipedia_articles",
+    "query",
+    "provider",
+    "rank",
+    "title",
+    "url",
+    "description",
+    "query_language",
+    "world_region",
+    "country",
+    "local_language",
+    "query_local_language",
+    "area_size_bin",
+    "polygon_category",
+]
+SEARCH_ATTEMPT_COLUMNS = [
+    "osm_type",
+    "osm_id",
+    "polygon_name",
+    "has_wikipedia_articles",
+    "query",
+    "attempted_at",
+    "result_count",
+    "query_language",
+    "search_error",
+]
+
+
+def empty_location_topic_search_results() -> pd.DataFrame:
+    return pd.DataFrame(columns=SEARCH_RESULT_COLUMNS)
+
+
+def empty_location_topic_search_attempts() -> pd.DataFrame:
+    return pd.DataFrame(columns=SEARCH_ATTEMPT_COLUMNS)
+
+
 def search_location_topic_for_polygon(
     polygon_row,
     search_func: Callable[..., list[dict]] = search_brave,
@@ -59,7 +99,18 @@ def search_location_topic_for_polygon(
         attempt_rows.append(attempt_row)
         sleep_func(request_delay_seconds)
 
-    return pd.DataFrame(rows), pd.DataFrame(attempt_rows)
+    search_results_df = (
+        pd.DataFrame(rows, columns=SEARCH_RESULT_COLUMNS)
+        if not rows
+        else pd.DataFrame(rows)
+    )
+    search_attempts_df = (
+        pd.DataFrame(attempt_rows, columns=SEARCH_ATTEMPT_COLUMNS)
+        if not attempt_rows
+        else pd.DataFrame(attempt_rows)
+    )
+
+    return search_results_df, search_attempts_df
 
 
 def build_location_topic_search_artifacts(
@@ -98,12 +149,12 @@ def build_location_topic_search_artifacts(
     search_results_df = (
         pd.concat(search_result_parts, ignore_index=True)
         if search_result_parts
-        else pd.DataFrame()
+        else empty_location_topic_search_results()
     )
     search_attempts_df = (
         pd.concat(search_attempt_parts, ignore_index=True)
         if search_attempt_parts
-        else pd.DataFrame()
+        else empty_location_topic_search_attempts()
     )
 
     return search_results_df, search_attempts_df

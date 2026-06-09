@@ -9,6 +9,50 @@ from georeset_osm_web_evidence.evidence.location_topic_search import (
 
 
 class LocationTopicSearchTests(unittest.TestCase):
+    def test_empty_search_artifacts_keep_expected_columns(self):
+        search_results_df, search_attempts_df = build_location_topic_search_artifacts(
+            pd.DataFrame(),
+            search_func=lambda _query, _count, **_kwargs: [],
+            sleep_func=lambda _seconds: None,
+        )
+
+        self.assertEqual(
+            search_results_df.columns.to_list(),
+            [
+                "osm_type",
+                "osm_id",
+                "polygon_name",
+                "has_wikipedia_articles",
+                "query",
+                "provider",
+                "rank",
+                "title",
+                "url",
+                "description",
+                "query_language",
+                "world_region",
+                "country",
+                "local_language",
+                "query_local_language",
+                "area_size_bin",
+                "polygon_category",
+            ],
+        )
+        self.assertEqual(
+            search_attempts_df.columns.to_list(),
+            [
+                "osm_type",
+                "osm_id",
+                "polygon_name",
+                "has_wikipedia_articles",
+                "query",
+                "attempted_at",
+                "result_count",
+                "query_language",
+                "search_error",
+            ],
+        )
+
     def test_searches_polygon_with_location_topic_queries(self):
         polygon_row = next(
             pd.DataFrame(
