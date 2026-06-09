@@ -143,7 +143,7 @@ def load_or_build_page_text_quality(
         )
 
     page_text_with_quality_df = add_quality_metadata(page_text_df)
-    page_text_with_quality_df.to_parquet(PAGE_TEXT_WITH_QUALITY_PATH, index=False)
+    write_dataframe_artifact(page_text_with_quality_df, PAGE_TEXT_WITH_QUALITY_PATH)
     logger.info(
         "Saved %s rows for page-text quality metadata to %s",
         len(page_text_with_quality_df),

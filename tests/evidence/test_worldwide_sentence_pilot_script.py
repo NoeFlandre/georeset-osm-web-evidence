@@ -230,6 +230,43 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         self.assertEqual(saved_search_results_df.index.to_list(), [0])
         self.assertEqual(saved_search_attempts_df.index.to_list(), [0])
 
+    def test_load_or_build_page_text_quality_creates_parent_directory(self) -> None:
+        page_text_df = pd.DataFrame(
+            [
+                {
+                    "url": "https://example.org/page",
+                    "text": "This forest contains wetlands and grassland habitats.",
+                }
+            ],
+            index=[42],
+        )
+
+        with TemporaryDirectory() as temporary_directory:
+            output_path = (
+                Path(temporary_directory)
+                / "nested"
+                / "page_text_with_quality.parquet"
+            )
+
+            with patch(
+                "scripts.evidence.run_worldwide_sentence_pilot.PAGE_TEXT_WITH_QUALITY_PATH",
+                output_path,
+            ):
+                result = pilot_script.load_or_build_page_text_quality(
+                    page_text_df,
+                    self._silent_logger("test_page_text_quality_parent_directory"),
+                    reset=True,
+                )
+
+            saved_df = pd.read_parquet(output_path)
+
+        self.assertEqual(saved_df.index.to_list(), [0])
+        self.assertEqual(saved_df["url"].to_list(), ["https://example.org/page"])
+        self.assertEqual(
+            saved_df["quality_score"].to_list(),
+            result["quality_score"].to_list(),
+        )
+
     def test_load_or_collect_search_results_reports_when_it_rebuilds(self) -> None:
         pilot_df = self._pilot_dataframe()
 
