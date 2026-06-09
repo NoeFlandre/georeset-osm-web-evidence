@@ -6,6 +6,7 @@ from georeset_osm_web_evidence.evidence.labeling_candidates import (
     build_labeling_candidates,
     write_labeling_candidates_jsonl,
 )
+from georeset_osm_web_evidence.storage.dataframe import write_dataframe_artifact
 
 DEFAULT_INPUT_PATH = Path("data/processed/evidence/sentence_candidates.parquet")
 DEFAULT_PARQUET_OUTPUT_PATH = Path(
@@ -30,11 +31,33 @@ def run_labeling_candidate_build(
         min_quality_score=min_quality_score,
     )
 
-    parquet_output_path.parent.mkdir(parents=True, exist_ok=True)
-    labeling_df.to_parquet(parquet_output_path, index=False)
+    write_dataframe_artifact(labeling_df, parquet_output_path)
     write_labeling_candidates_jsonl(labeling_df, jsonl_output_path)
 
     return labeling_df
+
+
+def format_labeling_candidate_summary(
+    labeling_df: pd.DataFrame,
+    parquet_output_path: str | Path,
+    jsonl_output_path: str | Path,
+) -> str:
+    lines = [
+        f"Saved {len(labeling_df)} labeling candidates to {Path(parquet_output_path)}",
+        f"Saved JSONL inputs to {Path(jsonl_output_path)}",
+    ]
+
+    if {"osm_type", "osm_id"}.issubset(labeling_df.columns):
+        polygon_count = labeling_df[["osm_type", "osm_id"]].drop_duplicates().shape[0]
+        lines.append(f"Covered {polygon_count} polygons")
+
+    if "url" in labeling_df.columns:
+        lines.append(f"Covered {labeling_df['url'].nunique()} URLs")
+
+    if "quality_score" in labeling_df.columns and not labeling_df.empty:
+        lines.append(f"Mean quality score: {labeling_df['quality_score'].mean():.3f}")
+
+    return "\n".join(lines)
 
 
 def print_labeling_candidate_summary(
@@ -42,18 +65,13 @@ def print_labeling_candidate_summary(
     parquet_output_path: Path,
     jsonl_output_path: Path,
 ) -> None:
-    print(f"Saved {len(labeling_df)} labeling candidates to {parquet_output_path}")
-    print(f"Saved JSONL inputs to {jsonl_output_path}")
-
-    if {"osm_type", "osm_id"}.issubset(labeling_df.columns):
-        polygon_count = labeling_df[["osm_type", "osm_id"]].drop_duplicates().shape[0]
-        print(f"Covered {polygon_count} polygons")
-
-    if "url" in labeling_df.columns:
-        print(f"Covered {labeling_df['url'].nunique()} URLs")
-
-    if "quality_score" in labeling_df.columns and not labeling_df.empty:
-        print(f"Mean quality score: {labeling_df['quality_score'].mean():.3f}")
+    print(
+        format_labeling_candidate_summary(
+            labeling_df,
+            parquet_output_path,
+            jsonl_output_path,
+        )
+    )
 
 
 def main() -> None:
