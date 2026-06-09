@@ -21,3 +21,15 @@ def write_json_artifact(
 
     if logger is not None and log_label is not None:
         logger.info(f"{log_label}: %s", json.dumps(payload, sort_keys=True))
+
+
+def write_jsonl_artifact(
+    path: str | Path,
+    rows: Iterable[dict],
+) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as file:
+        for row in rows:
+            file.write(json.dumps(row, ensure_ascii=False) + "\n")

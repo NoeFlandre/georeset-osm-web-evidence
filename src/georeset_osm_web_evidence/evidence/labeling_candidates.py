@@ -1,8 +1,9 @@
 import hashlib
-import json
 from pathlib import Path
 
 import pandas as pd
+
+from georeset_osm_web_evidence.pipeline.artifacts import write_jsonl_artifact
 
 
 def normalize_model_input(text: str) -> str:
@@ -39,13 +40,13 @@ def write_labeling_candidates_jsonl(
     labeling_df: pd.DataFrame,
     output_path: str | Path,
 ) -> None:
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with output_path.open("w", encoding="utf-8") as file:
-        for _, row in labeling_df.iterrows():
-            payload = {
+    write_jsonl_artifact(
+        output_path,
+        (
+            {
                 "sentence_id": row["sentence_id"],
                 "text": row["model_input"],
             }
-            file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            for _, row in labeling_df.iterrows()
+        ),
+    )

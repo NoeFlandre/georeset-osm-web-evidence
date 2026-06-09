@@ -1,4 +1,3 @@
-import json
 import hashlib
 from collections.abc import Callable
 from pathlib import Path
@@ -11,6 +10,7 @@ from georeset_osm_web_evidence.labeling.prompt import (
     build_binary_label_prompt,
     build_location_aware_binary_label_prompt,
 )
+from georeset_osm_web_evidence.pipeline.artifacts import write_jsonl_artifact
 
 LABELING_OUTPUT_COLUMNS = [
     "sentence_id",
@@ -127,17 +127,17 @@ def write_labeling_prompt_jsonl(
     prompt_df: pd.DataFrame,
     output_path: str | Path,
 ) -> None:
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with output_path.open("w", encoding="utf-8") as file:
-        for _, row in prompt_df.iterrows():
-            payload = {
+    write_jsonl_artifact(
+        output_path,
+        (
+            {
                 "sentence_id": row["sentence_id"],
                 "prompt_version": row["prompt_version"],
                 "prompt": row["prompt"],
             }
-            file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            for _, row in prompt_df.iterrows()
+        ),
+    )
 
 
 def build_and_write_labeling_prompt_artifacts(

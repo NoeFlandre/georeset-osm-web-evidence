@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from georeset_osm_web_evidence.pipeline.artifacts import (
     delete_artifacts,
     write_json_artifact,
+    write_jsonl_artifact,
 )
 
 
@@ -45,6 +46,23 @@ class PipelineArtifactTests(unittest.TestCase):
             self.assertFalse(existing_path.exists())
             self.assertFalse(nested_path.exists())
             self.assertFalse(missing_path.exists())
+
+    def test_write_jsonl_artifact_creates_parent_and_preserves_unicode(self) -> None:
+        rows = [
+            {"sentence_id": "s1", "text": "Forêt humide"},
+            {"sentence_id": "s2", "text": "Prairie ouverte"},
+        ]
+
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "nested" / "rows.jsonl"
+
+            write_jsonl_artifact(path, rows)
+
+            saved_lines = path.read_text(encoding="utf-8").splitlines()
+            saved_rows = [json.loads(line) for line in saved_lines]
+
+        self.assertEqual(saved_rows, rows)
+        self.assertIn("Forêt humide", saved_lines[0])
 
 
 if __name__ == "__main__":
