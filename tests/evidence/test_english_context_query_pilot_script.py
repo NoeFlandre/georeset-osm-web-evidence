@@ -18,60 +18,6 @@ class EnglishContextQueryPilotScriptTests(unittest.TestCase):
         )
         self.assertNotEqual(pilot.OUTPUT_DIR, pilot.ENGLISH_ONLY_OUTPUT_DIR)
 
-    def test_builds_context_query_search_artifacts_with_injected_search(self):
-        pilot_gdf = pd.DataFrame(
-            [
-                {
-                    "osm_type": "way",
-                    "osm_id": 1,
-                    "osm_tags": {
-                        "name": "Sagole Baobab",
-                        "leisure": "nature_reserve",
-                    },
-                    "polygon_name": "Sagole Baobab",
-                    "has_wikipedia_articles": False,
-                    "country": "South Africa",
-                    "world_region": "Africa",
-                    "source_extract_id": "south-africa",
-                    "polygon_category": "protected_area",
-                    "local_language": "en",
-                    "query_local_language": "en",
-                    "area_size_bin": "tiny",
-                }
-            ]
-        )
-        seen_queries = []
-
-        def fake_search(query: str, count: int, **kwargs):
-            seen_queries.append(query)
-            self.assertEqual(kwargs["country"], "US")
-            self.assertEqual(kwargs["search_lang"], "en")
-            return [
-                {
-                    "provider": "brave",
-                    "title": "Search result",
-                    "url": f"https://example.org/{len(seen_queries)}",
-                    "description": "Description",
-                }
-            ]
-
-        search_results_df, search_attempts_df = pilot.build_context_query_search_artifacts(
-            pilot_gdf,
-            search_func=fake_search,
-            sleep_func=lambda _seconds: None,
-            results_per_query=1,
-            request_delay_seconds=0,
-        )
-
-        self.assertEqual(len(seen_queries), 4)
-        self.assertEqual(search_results_df["query_language"].unique().tolist(), ["en"])
-        self.assertEqual(search_attempts_df["query_language"].unique().tolist(), ["en"])
-        self.assertTrue(all("South Africa" in query or "Africa" in query for query in seen_queries))
-        self.assertIn(
-            '"Sagole Baobab" "South Africa" protected area',
-            seen_queries,
-        )
-
     def test_writes_context_pilot_prompt_request_artifacts(self):
         sentence_df = pd.DataFrame(
             [

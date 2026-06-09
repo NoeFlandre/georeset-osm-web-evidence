@@ -12,15 +12,15 @@ from georeset_osm_web_evidence.evidence.english_search import (
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.queries import (
-    build_location_topic_english_search_queries,
+    build_contextual_english_search_queries,
 )
 
 
-def _location_topic_queries_for_polygon(
+def _context_queries_for_polygon(
     polygon_row,
     max_queries_per_polygon: int,
 ) -> list[str]:
-    return build_location_topic_english_search_queries(
+    return build_contextual_english_search_queries(
         osm_tags=polygon_row.osm_tags,
         country=polygon_row.country,
         world_region=polygon_row.world_region,
@@ -30,15 +30,15 @@ def _location_topic_queries_for_polygon(
     )
 
 
-def empty_location_topic_search_results() -> pd.DataFrame:
+def empty_context_query_search_results() -> pd.DataFrame:
     return empty_english_search_results()
 
 
-def empty_location_topic_search_attempts() -> pd.DataFrame:
+def empty_context_query_search_attempts() -> pd.DataFrame:
     return empty_english_search_attempts()
 
 
-def search_location_topic_for_polygon(
+def search_context_queries_for_polygon(
     polygon_row,
     search_func: Callable[..., list[dict]] = search_brave,
     sleep_func: Callable[[float], None] = time.sleep,
@@ -47,10 +47,7 @@ def search_location_topic_for_polygon(
     request_delay_seconds: float = 1.2,
     logger: logging.Logger | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    queries = _location_topic_queries_for_polygon(
-        polygon_row,
-        max_queries_per_polygon,
-    )
+    queries = _context_queries_for_polygon(polygon_row, max_queries_per_polygon)
     return search_english_queries_for_polygon(
         polygon_row,
         queries=queries,
@@ -62,7 +59,7 @@ def search_location_topic_for_polygon(
     )
 
 
-def build_location_topic_search_artifacts(
+def build_context_query_search_artifacts(
     pilot_gdf: pd.DataFrame,
     search_func: Callable[..., list[dict]] = search_brave,
     sleep_func: Callable[[float], None] = time.sleep,
@@ -73,7 +70,7 @@ def build_location_topic_search_artifacts(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     return build_english_search_artifacts(
         pilot_gdf,
-        query_builder=_location_topic_queries_for_polygon,
+        query_builder=_context_queries_for_polygon,
         search_func=search_func,
         sleep_func=sleep_func,
         max_queries_per_polygon=max_queries_per_polygon,

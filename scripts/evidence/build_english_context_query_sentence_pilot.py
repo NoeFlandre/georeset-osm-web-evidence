@@ -1,12 +1,13 @@
 import json
 import logging
 import os
-import time
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 
+from georeset_osm_web_evidence.evidence.context_query_search import (
+    build_context_query_search_artifacts,
+)
 from georeset_osm_web_evidence.evidence.page_text import fetch_candidate_pages
 from georeset_osm_web_evidence.evidence.english_sentences import (
     build_english_sentence_candidates,
@@ -18,17 +19,12 @@ from georeset_osm_web_evidence.evidence.sentence_candidates import (
 from georeset_osm_web_evidence.evidence.worldwide_pilot import (
     attach_polygon_metadata,
     build_candidate_urls,
-    build_search_rows_for_query,
     filter_to_sentence_polygons,
     summarize_sentence_pilot,
 )
 from georeset_osm_web_evidence.labeling.requests import (
     build_sentence_candidate_prompt_rows,
     write_labeling_prompt_jsonl,
-)
-from georeset_osm_web_evidence.search.providers import search_brave
-from georeset_osm_web_evidence.search.queries import (
-    build_contextual_english_search_queries,
 )
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -101,65 +97,6 @@ def configure_logging() -> logging.Logger:
     return logger
 
 
-def build_context_query_search_artifacts(
-    pilot_gdf: pd.DataFrame,
-    search_func: Callable[[str, int], list[dict]] = search_brave,
-    sleep_func: Callable[[float], None] = time.sleep,
-    results_per_query: int = RESULTS_PER_QUERY,
-    request_delay_seconds: float = REQUEST_DELAY_SECONDS,
-    logger: logging.Logger | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    rows = []
-    attempt_rows = []
-
-    for polygon_index, polygon_row in enumerate(pilot_gdf.itertuples(), start=1):
-        queries = build_contextual_english_search_queries(
-            osm_tags=polygon_row.osm_tags,
-            country=polygon_row.country,
-            world_region=polygon_row.world_region,
-            source_extract_id=polygon_row.source_extract_id,
-            polygon_category=polygon_row.polygon_category,
-            max_queries=MAX_QUERIES_PER_POLYGON,
-        )
-
-        if logger is not None:
-            logger.info(
-                "Searching polygon %s/%s: %s (%s context queries)",
-                polygon_index,
-                len(pilot_gdf),
-                polygon_row.polygon_name,
-                len(queries),
-            )
-
-        for query in queries:
-            search_error = None
-            try:
-                results = search_func(
-                    query,
-                    count=results_per_query,
-                    country="US",
-                    search_lang="en",
-                )
-            except Exception as error:
-                results = []
-                search_error = str(error)
-                if logger is not None:
-                    logger.warning("Search failed for %s: %s", query, search_error)
-
-            result_rows, attempt_row = build_search_rows_for_query(
-                polygon_row=polygon_row,
-                query_language="en",
-                query=query,
-                results=results,
-                search_error=search_error,
-            )
-            rows.extend(result_rows)
-            attempt_rows.append(attempt_row)
-            sleep_func(request_delay_seconds)
-
-    return pd.DataFrame(rows), pd.DataFrame(attempt_rows)
-
-
 def run_context_pilot_labeling_request_build(
     input_path: str | Path = SENTENCE_CANDIDATES_PATH,
     parquet_output_path: str | Path = LLM_REQUESTS_PARQUET_PATH,
@@ -218,6 +155,9 @@ def main() -> None:
     else:
         search_results_df, search_attempts_df = build_context_query_search_artifacts(
             pilot_gdf,
+            max_queries_per_polygon=MAX_QUERIES_PER_POLYGON,
+            results_per_query=RESULTS_PER_QUERY,
+            request_delay_seconds=REQUEST_DELAY_SECONDS,
             logger=logger,
         )
         search_results_df.to_parquet(SEARCH_RESULTS_PATH, index=False)
