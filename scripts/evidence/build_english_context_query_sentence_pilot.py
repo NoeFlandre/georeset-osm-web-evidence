@@ -25,7 +25,10 @@ from georeset_osm_web_evidence.labeling.requests import (
     build_sentence_candidate_prompt_rows,
     write_labeling_prompt_jsonl,
 )
-from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
+from georeset_osm_web_evidence.pipeline.artifacts import (
+    delete_artifacts,
+    write_json_artifact,
+)
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -104,20 +107,21 @@ def run_context_pilot_labeling_request_build(
 
 
 def reset_outputs() -> None:
-    for path in [
-        PILOT_POLYGONS_PATH,
-        SEARCH_RESULTS_PATH,
-        SEARCH_ATTEMPTS_PATH,
-        CANDIDATE_URLS_PATH,
-        PAGE_TEXT_PATH,
-        PAGE_TEXT_WITH_QUALITY_PATH,
-        SENTENCE_CANDIDATES_PATH,
-        COMPLETE_POLYGONS_PATH,
-        LLM_REQUESTS_PARQUET_PATH,
-        LLM_REQUESTS_JSONL_PATH,
-        ANALYSIS_PATH,
-    ]:
-        path.unlink(missing_ok=True)
+    delete_artifacts(
+        [
+            PILOT_POLYGONS_PATH,
+            SEARCH_RESULTS_PATH,
+            SEARCH_ATTEMPTS_PATH,
+            CANDIDATE_URLS_PATH,
+            PAGE_TEXT_PATH,
+            PAGE_TEXT_WITH_QUALITY_PATH,
+            SENTENCE_CANDIDATES_PATH,
+            COMPLETE_POLYGONS_PATH,
+            LLM_REQUESTS_PARQUET_PATH,
+            LLM_REQUESTS_JSONL_PATH,
+            ANALYSIS_PATH,
+        ]
+    )
 
 
 def main() -> None:

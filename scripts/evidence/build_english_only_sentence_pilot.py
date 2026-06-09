@@ -21,7 +21,10 @@ from georeset_osm_web_evidence.evidence.page_text import (
     PAGE_TEXT_COLUMNS,
     fetch_candidate_pages,
 )
-from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
+from georeset_osm_web_evidence.pipeline.artifacts import (
+    delete_artifacts,
+    write_json_artifact,
+)
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
@@ -105,15 +108,16 @@ def main() -> None:
     logger = configure_logging()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if RESET_OUTPUTS:
-        for path in [
-            CANDIDATE_URLS_PATH,
-            PAGE_TEXT_PATH,
-            PAGE_TEXT_WITH_QUALITY_PATH,
-            SENTENCE_CANDIDATES_PATH,
-            COMPLETE_POLYGONS_PATH,
-            ANALYSIS_PATH,
-        ]:
-            path.unlink(missing_ok=True)
+        delete_artifacts(
+            [
+                CANDIDATE_URLS_PATH,
+                PAGE_TEXT_PATH,
+                PAGE_TEXT_WITH_QUALITY_PATH,
+                SENTENCE_CANDIDATES_PATH,
+                COMPLETE_POLYGONS_PATH,
+                ANALYSIS_PATH,
+            ]
+        )
 
     logger.info("Starting English-only sentence pilot")
     pilot_gdf = load_geodataframe(BASE_PILOT_POLYGONS_PATH)

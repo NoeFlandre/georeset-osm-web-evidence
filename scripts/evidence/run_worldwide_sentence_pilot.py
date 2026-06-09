@@ -31,7 +31,10 @@ from georeset_osm_web_evidence.evidence.worldwide_pilot import (
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
-from georeset_osm_web_evidence.pipeline.artifacts import write_json_artifact
+from georeset_osm_web_evidence.pipeline.artifacts import (
+    delete_artifacts,
+    write_json_artifact,
+)
 from georeset_osm_web_evidence.pipeline.logging import configure_stage_logger
 from georeset_osm_web_evidence.storage.dataframe import load_or_build_dataframe
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
@@ -116,8 +119,7 @@ def configure_logging() -> logging.Logger:
 
 
 def reset_output_artifacts() -> None:
-    for path in OUTPUT_ARTIFACT_PATHS:
-        path.unlink(missing_ok=True)
+    delete_artifacts(OUTPUT_ARTIFACT_PATHS)
 
 
 def load_or_build_page_text_quality(

@@ -1,6 +1,12 @@
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
+
+
+def delete_artifacts(paths: Iterable[str | Path]) -> None:
+    for path in paths:
+        Path(path).unlink(missing_ok=True)
 
 
 def write_json_artifact(
