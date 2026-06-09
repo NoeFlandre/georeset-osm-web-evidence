@@ -15,7 +15,6 @@ from scripts.evidence.run_worldwide_sentence_pilot import (
     build_pilot_sentence_candidates,
     collect_search_results,
     load_or_collect_search_results,
-    load_or_build_dataframe,
     pilot_artifact_is_usable,
     search_attempts_cover_expected_queries,
 )
@@ -203,39 +202,6 @@ class WorldwideSentencePilotScriptTests(unittest.TestCase):
         self.assertTrue(rebuilt)
         self.assertEqual(results_df["url"].to_list(), ["https://fresh.example"])
         self.assertEqual(len(attempts_df), 2)
-
-    def test_load_or_build_dataframe_reuses_existing_artifact(self) -> None:
-        with TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "stage.parquet"
-            existing_df = pd.DataFrame([{"value": "cached"}])
-            existing_df.to_parquet(path, index=False)
-
-            result = load_or_build_dataframe(
-                path=path,
-                stage_name="test stage",
-                logger=self._silent_logger("test_load_existing_stage"),
-                build=lambda: pd.DataFrame([{"value": "rebuilt"}]),
-                reset=False,
-            )
-
-        self.assertEqual(result["value"].to_list(), ["cached"])
-
-    def test_load_or_build_dataframe_rebuilds_when_reset_is_requested(self) -> None:
-        with TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "stage.parquet"
-            pd.DataFrame([{"value": "cached"}]).to_parquet(path, index=False)
-
-            result = load_or_build_dataframe(
-                path=path,
-                stage_name="test stage",
-                logger=self._silent_logger("test_reset_stage"),
-                build=lambda: pd.DataFrame([{"value": "rebuilt"}]),
-                reset=True,
-            )
-            saved_df = pd.read_parquet(path)
-
-        self.assertEqual(result["value"].to_list(), ["rebuilt"])
-        self.assertEqual(saved_df["value"].to_list(), ["rebuilt"])
 
     def test_build_pilot_sentence_candidates_applies_sampling_limits(self) -> None:
         sentence_terms = [

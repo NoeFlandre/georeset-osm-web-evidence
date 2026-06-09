@@ -3,7 +3,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 import requests
@@ -33,6 +32,7 @@ from georeset_osm_web_evidence.evidence.worldwide_pilot import (
 )
 from georeset_osm_web_evidence.search.providers import search_brave
 from georeset_osm_web_evidence.search.terms import TERMS_BY_LANGUAGE
+from georeset_osm_web_evidence.storage.dataframe import load_or_build_dataframe
 from georeset_osm_web_evidence.storage.local import load_geodataframe, save_geodataframe
 from georeset_osm_web_evidence.text.sentences import (
     SENTENCE_FILTER_PROFILE,
@@ -129,31 +129,6 @@ def configure_logging() -> logging.Logger:
 def reset_output_artifacts() -> None:
     for path in OUTPUT_ARTIFACT_PATHS:
         path.unlink(missing_ok=True)
-
-
-def load_or_build_dataframe(
-    path: Path,
-    stage_name: str,
-    logger: logging.Logger,
-    build: Callable[[], pd.DataFrame],
-    reset: bool = False,
-    load: Callable[[Path], pd.DataFrame] = pd.read_parquet,
-    save: Callable[[pd.DataFrame, Path], None] | None = None,
-) -> pd.DataFrame:
-    if path.exists() and not reset:
-        dataframe = load(path)
-        logger.info("Loaded %s rows for %s from %s", len(dataframe), stage_name, path)
-        return dataframe
-
-    dataframe = build()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if save is None:
-        dataframe.to_parquet(path, index=False)
-    else:
-        save(dataframe, path)
-    logger.info("Saved %s rows for %s to %s", len(dataframe), stage_name, path)
-
-    return dataframe
 
 
 def load_or_build_page_text_quality(
